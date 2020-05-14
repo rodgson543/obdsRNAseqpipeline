@@ -1,0 +1,16 @@
+q: all.q
+
+bowtie2:
+    index: /ifs/mirror/genomes/bowtie/mm10
+    threads: 12
+    options: --very-fast 
+    memory: 2G
+
+picard:
+    memory: 4
+    genome: /ifs/mirror/genomes/plain/mm10.fasta 
+
+macs2:
+    genome: mm
+
+blacklist: ifs/obds-training/apr20/exercises/chipseq_pipeline/mm10.blacklist.bed.gz
