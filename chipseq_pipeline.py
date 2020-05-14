@@ -80,24 +80,45 @@ def picard (infile, outfile):
 def idxstats (infile, outfile):
      statement = """samtools idxstats %(infile)s > %(outfile)s"""
      P.run(statement, job_queue = params['q'])    
-
-#Adding step to remove duplicates
-#input output logfile
-@transform (bowtie2, regex(r'(.*).bam'), r'\1.rmdup.bam')
-def picard_rmdup (infile, outfile):
-     final_memory = str(int(params['picard_memory'])+ 2)+'g'
-     statement = """picard -Xmx%(picard_memory)sg MarkDuplicates REMOVE_DUPLICATES = true
-                    I= %(infile)s O=%(outfile)s M= %(outfile)s.metrics"""
-     P.run(statement, job_queue = params['q'], job_memory= final_memory)
-
-
-
      
 #flagstats - looking at reads per flag
 @transform (bowtie2, regex(r'(.*).bam'), r'\1.flagstats')
 def flagstats (infile, outfile):
      statement = """samtools flagstats %(infile)s > %(outfile)s"""
      P.run(statement, job_queue = params['q'])    
+
+#Adding step to remove duplicates
+#input output logfile
+#removed duplicates here using picard
+#also had to index the bam file
+@transform (bowtie2, regex(r'(.*).bam'), r'\1.rmdup.bam')
+def picard_rmdup (infile, outfile):
+     final_memory = str(int(params['picard_memory'])+ 2)+'g'
+     statement = """picard -Xmx%(picard_memory)sg MarkDuplicates REMOVE_DUPLICATES = true
+                    I= %(infile)s O=%(outfile)s M= %(outfile)s.metrics
+                    && samtools index %(outfile)s"""
+     P.run(statement, job_queue = params['q'], job_memory= final_memory)
+
+#We're now going to filter unmapped reads using samtools 
+#Look at flags and think abotu values for the filters flags: http://broadinstitute.github.io/picard/explain-flags.html
+#-f 1 keeps the paired reads, -f 2 keeps reads mapped in a proper pair
+#-F gets rid of unmapped pairs
+#-F 0x100 gets rid of not primary alignment
+#-b makes it a bam file, -h keeps the header
+#Dave Tang page to explain https://davetang.org/wiki/tiki-index.php?page=SAMTools
+#Index at the end
+#So so far at this step - we want to filter the output of picard removed duplicates so input will be picardrmdup
+#sort out regex so the rmdup will be removed 
+#To filter out mitochondrial reads too, use after input file chr{1}
+@transform(picard_rmdup, regex(r'(.*).rmdup.bam'), r'\1.filter_read.bam')
+def filter_read(infile, outfile):
+    statement = """samtools view -h -b -f1 -f2 -F 4 -F 0x100%(infile)s chr{1..19} > %(outfile)s
+    && samtools index %(outfile)s"""
+    P.run(statement,job_queue = params['q'])
+
+
+     
+
 
 #merging these QC params into a multuQC file - givinga list of functions that it's merging 
 #will take stats from each of these 
