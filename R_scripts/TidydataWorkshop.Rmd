@@ -1,0 +1,156 @@
+---
+title: "Tidyverse.Rmd"
+author: "rhodgson"
+date: "27/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(biomaRt)
+```
+
+```{r}
+counts <- read_tsv("/Users/rhodgson/OBDStestdata/Week5/obds_countstable.tsv.gz")
+counts
+metadata <- read_tsv("/Users/rhodgson/OBDStestdata/Week5/obds_sampletable.tsv")
+metadata
+```
+First want to tidy up the data using pivot_longer - Geneid, sample, count
+have used pipe so we dont need to put data in. will select columns starting with ERR, change name of the column to sample and make a column called counts where the values will go into
+```{r}
+counts_processed <- counts %>%
+  pivot_longer(cols = starts_with("ERR"), names_to = "sample", values_to= "count", values_drop_na=TRUE)
+counts_processed
+View(counts_processed)
+```
+
+Going to use the biomaRt package to get the mgi_symbol - this will allow us to get the ensembl gene id with th symbols so we can add the symbols to the couns table
+
+Column in these databases have attributes
+```{r}
+#Load in dataset - info on mouse genome
+mart <- useDataset("mmusculus_gene_ensembl", mart=useMart("ensembl"))
+mart
+list_attributes <- listAttributes(mart)
+View(list_attributes)
+```
+use getBM to extract columns of data that match a certain key - from mouse genome, fetch gene id and mgi symbol
+```{r}
+mgi_symbol_mart <- getBM(attributes = c("ensembl_gene_id", "mgi_symbol"), mart=mart, )
+View(mgi_symbol_mart)
+```
+Rename ensmebl gene ide in table processed to allow us to join the table with mgi symbol mart
+```{r}
+table_processed <- counts_processed %>%
+  rename(ensembl_gene_id = Geneid)
+table_processed
+```
+Join table using ensemblgene id as key - Now this table will have a new column containing the gene symbol 
+```{r}
+table_processed <- table_processed %>% left_join(mgi_symbol_mart)
+View(table_processed)
+```
+Tidy metadata file - make one variable per column and can delete species and library 
+
+#We want to split the sample column into multiple columns: we want gene affected, Genotype, CD4 or CD8 and replicate
+```{r}
+metadata_clean <- metadata %>%
+  separate(sample_title, c("Gene", "Genotype", "Celltype", "Replicate"), sep = "_")
+metadata_clean
+
+```
+
+Join cclean_meta data and count table
+```{r}
+library(dplyr)
+metadata_clean2 <- metadata_clean %>%
+  dplyr::select(Sample_accession:Replicate,read_count)
+metadata_clean2
+  
+```
+
+
+Add metadata to table with counts and gene info
+First rename sample_accession in metadata_clean2
+```{r}
+metadata_clean3 <- metadata_clean2 %>%
+  rename(sample = Sample_accession)
+
+```
+
+Can now do left join using this column (sample)
+```{r}
+jointtable <- table_processed %>% left_join(metadata_clean3)
+View(jointtable)
+```
+Calculate counts per million (CPM) - use group_by() and mutate()
+Normalise each value to total per million
+read_count is actually the sum(counts) but best to just do it yourself
+```{r}
+jointtable2 <- jointtable %>%
+    group_by(sample) %>%
+  mutate(CPM = (count/sum(count))*1000000)
+jointtable2
+range(jointtable2$CPM)
+```
+Now calculate log2(CPM+0.25)
+
+```{r}
+jointtable3 <- jointtable2 %>%
+    group_by(sample) %>%
+  mutate(logCPM = log2(CPM+0.25))
+#jointtable3
+range(jointtable3$logCPM) 
+```
+
+Plot read depth per sample
+Use group_by() and summarise
+Make variable for read depth
+```{r}
+read_depth <- jointtable3 %>% group_by(sample) %>% summarize(read_depth = sum(count))
+#View(read_depth)
+ggplot(read_depth, aes(x=sample, y= read_depth)) +geom_bar(stat="identity") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) #change angle
+```
+How many genes have no counts? Need to group by mgi_symbol and calculate total reads per gene across sample - then filter bythis value by 0
+```{r}
+genes_nocounts <- jointtable3 %>% group_by(mgi_symbol) %>% summarize(count_sum = sum(count)) %>% filter(count_sum == 0)
+  
+View(genes_nocounts)
+#Calculate number
+dim(genes_nocounts)[1]
+```
+Draw a density plot of log2 CPM for all genes
+Use geom_density() and colour by sample
+Are the samples similar?
+
+```{r}
+ggplot(jointtable3, aes(x= logCPM, color = sample)) +geom_density()
+```
+
+Filter out genes with low expression in 3 or fewer samples:
+For low expression use CPM < 0.5
+What proportion of genes are lowly expressed?
+Generates a logical vector - wheterh the  cpm value is greater than 0.5. True has a value of 1, so keep things over 3 (3 samples have gene >0.5logcpm_) 
+!is.na(mgi_symbol) will give us all cases where it's not na
+But how to check this has worked? 
+```{r}
+Filtergenes <- jointtable3 %>% filter(!is.na(mgi_symbol)) %>% group_by(mgi_symbol) %>% mutate(nvalue= sum(CPM > 0.5)) %>% filter(nvalue>=3)
+
+Filtergenes
+range(Filtergenes$nvalue)
+```
+
+Plot density plot of this again
+```{r}
+ggplot(Filtergenes, aes(x=logCPM, color = sample))+geom_density()
+```
+
+#Biological exploration of the data
+Plot CD4 and CD8 expression for all samples - does it make sense?
+Colour by replicate and facet by genotype against cell type. Generate the same plot for Egr2 and Egr3 for all samples - does it make sense? Choose 8 biologically relevant genes and plot a heatmap using the pheatmap package
+
