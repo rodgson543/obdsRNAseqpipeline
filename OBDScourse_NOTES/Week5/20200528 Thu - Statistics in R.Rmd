@@ -1,0 +1,1267 @@
+---
+title: 'Statistics and Machine Learning'
+subtitle: 'in <i class="fab fa-r-project"></i>'
+author: "Kevin Rue-Albrecht"
+institute: "Oxford Biomedical Data Science Training Programme"
+date: "2020-05-28 (updated: `r Sys.Date()`)"
+output:
+  xaringan::moon_reader:
+    css: [default, metropolis, rladies-fonts, "my-theme.css"]
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+# uncomment this line to produce HTML and PDF in RStudio:
+knit: pagedown::chrome_print
+---
+
+layout: true
+
+<div class="my-header"><img src="img/ox_brand1_pos.gif" alt="Oxford University Logo" align="right" height="90%"></div>
+
+<div class="my-footer"><span>
+Kevin Rue-Albrecht
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;
+Statistics and Machine Learning in <i class="fab fa-r-project"></i>
+</span></div>
+
+```{r setup, include = FALSE}
+stopifnot(requireNamespace("htmltools"))
+htmltools::tagList(rmarkdown::html_dependency_font_awesome())
+knitr::opts_chunk$set(
+  message = FALSE, warning = FALSE, error = FALSE,
+  include = FALSE
+)
+stopifnot(require(tidyverse))
+stopifnot(require(ALL))
+stopifnot(require(hgu95av2.db))
+stopifnot(require(matrixStats))
+stopifnot(require(cowplot))
+stopifnot(require(AnnotationDbi))
+stopifnot(require(GO.db))
+stopifnot(require(caret))
+data(ALL)
+```
+
+---
+
+# Learning objectives
+
+<br/>
+
+.xx-large-list[
+- Learn to use the builtin statistical distributions
+
+- Learn to use the builtin statistical tests
+
+- Run tests and interpret results 
+
+- Visualise  data and test results 
+]
+
+---
+
+# <i class="fab fa-r-project"></i> is built for statistics
+
+- <i class="fab fa-r-project"></i> includes a number of common statistical distributions:
+
+  + The Normal Distribution
+  
+  + The Binomial Distribution
+  
+  + The Poisson Distribution
+  
+  + ...
+
+--
+
+- <i class="fab fa-r-project"></i> implements a range of statistical tests:
+
+  + Student's t-Test
+  
+  + Pearson's Chi-squared Test for Count Data
+  
+  + Wilcoxon Rank Sum and Signed Rank Tests
+  
+  + ...
+
+---
+
+# <i class="fab fa-r-project"></i> Functions for Probability Distributions
+
+<!-- Sources
+https://www.stat.umn.edu/geyer/old/5101/rlook.html
+-->
+
+.pull-left[
+.xx-small-table[
+|Distribution                   |Probability |Quantile    |Density     |Random      |
+|:------------------------------|:-----------|:-----------|:-----------|:-----------|
+|Beta                           |`pbeta`     |`qbeta`     |`dbeta`     |`rbeta`     |
+|Binomial                       |`pbinom`    |`qbinom`    |`dbinom`    |`rbinom`    |
+|Cauchy                         |`pcauchy`   |`qcauchy`   |`dcauchy`   |`rcauchy`   |
+|Chi-Square                     |`pchisq`    |`qchisq`    |`dchisq`    |`rchisq`    |
+|Exponential                    |`pexp`      |`qexp`      |`dexp`      |`rexp`      |
+|F                              |`pf`        |`qf`        |`df`        |`rf`        |
+|Gamma                          |`pgamma`    |`qgamma`    |`dgamma`    |`rgamma`    |
+|Geometric                      |`pgeom`     |`qgeom`     |`dgeom`     |`rgeom`     |
+|Hypergeometric                 |`phyper`    |`qhyper`    |`dhyper`    |`rhyper`    |
+|Logistic                       |`plogis`    |`qlogis`    |`dlogis`    |`rlogis`    |
+|Log Normal                     |`plnorm`    |`qlnorm`    |`dlnorm`    |`rlnorm`    |
+|Negative Binomial              |`pnbinom`   |`qnbinom`   |`dnbinom`   |`rnbinom`   |
+|Normal                         |`pnorm`     |`qnorm`     |`dnorm`     |`rnorm`     |
+|Poisson                        |`ppois`     |`qpois`     |`dpois`     |`rpois`     |
+|Student t                      |`pt`        |`qt`        |`dt`        |`rt`        |
+|Studentized Range              |`ptukey`    |`qtukey`    |`dtukey`    |`rtukey`    |
+|Uniform                        |`punif`     |`qunif`     |`dunif`     |`runif`     |
+|Weibull                        |`pweibull`  |`qweibull`  |`dweibull`  |`rweibull`  |
+|Wilcoxon Rank Sum Statistic    |`pwilcox`   |`qwilcox`   |`dwilcox`   |`rwilcox`   |
+|Wilcoxon Signed Rank Statistic |`psignrank` |`qsignrank` |`dsignrank` |`rsignrank` |
+]
+]
+
+.pull-right[
+.small-text[
+- Each distribution has a root name, e.g. `norm`
+
+- Every distribution has four functions.
+
+- The root name is prefixed by one of the letters:
+
+  + `p` for "probability", the cumulative distribution function (c. d. f.)
+  
+  + `q` for "quantile", the inverse c. d. f.
+  
+  + `d` for "density", the density function (p. f. or p. d. f.)
+  
+  + `r` for "random", a random variable having the specified distribution
+]
+]
+
+---
+
+# The normal distribution
+
+## Notation
+
+$${\mathcal {N}}(\mu ,\sigma ^{2})$$
+--
+
+## Parameters
+
+- ${\mu \in \mathbb {R} }$ = mean (location)
+
+- ${ \sigma ^{2}>0}$ = variance (squared scale)
+
+--
+
+## Properties
+
+.pull-left[
+- Median: ${ \mu }$
+
+- Mode: ${ \mu }$
+]
+
+.pull-right[
+- Variance: ${ \sigma ^{2} }$
+]
+
+--
+
+- Probability density function (PDF): ${\displaystyle {\frac {1}{\sigma {\sqrt {2\pi }}}}e^{-{\frac {1}{2}}\left({\frac {x-\mu }{\sigma }}\right)^{2}}}$
+
+---
+
+# The standard normal distribution
+
+```{r}
+slide_mean <- 0; slide_sd <- 1;
+```
+
+Standard normal distribution with mean `r slide_mean` and standard deviation `r slide_sd`.
+
+```{r}
+x <- tibble(
+  quantile = seq(from = slide_mean-5*slide_sd, to = slide_mean+5*slide_sd, by = slide_sd/100),
+  pnorm = pnorm(q = quantile, mean = slide_mean, sd = slide_sd)
+)
+gg1 <- ggplot(x) + geom_point(aes(quantile, pnorm)) +
+  geom_vline(xintercept = slide_mean, color = "blue") +
+  geom_label(aes(x = x, label = x), y = 0, data = tibble(x = slide_mean)) +
+  geom_vline(xintercept = slide_mean+slide_sd*c(-2, 2), color = "blue", linetype = "dashed") +
+  geom_label(
+    aes(x = x, label = label), y = 0, alpha = 0.5,
+    data = tibble(x = slide_mean+slide_sd*c(-2, 2), label = "2*sd")) +
+  labs(
+    title = sprintf("pnorm(q = quantile, mean = %s, sd = %s)", slide_mean, slide_sd),
+    subtitle = "the cumulative distribution function (c. d. f.)")
+```
+
+```{r}
+x <- tibble(
+  quantile = seq(from = 0, to = 1, by = 0.01),
+  qnorm = qnorm(p = quantile, mean = slide_mean, sd = slide_sd)
+)
+gg2 <- ggplot(x) + geom_point(aes(quantile, qnorm)) +
+  geom_hline(yintercept = slide_mean, color = "blue") +
+  geom_label(aes(y = y, label = y), x = 0, data = tibble(y = slide_mean)) +
+  geom_hline(yintercept = slide_mean+slide_sd*c(-2, 2), color = "blue", linetype = "dashed") +
+  geom_label(
+    aes(y = y, label = label), x = 0, alpha = 0.5,
+    data = tibble(y = slide_mean+slide_sd*c(-2, 2), label = "2*sd")) +
+  labs(
+    title = sprintf("qnorm(p = quantile, mean = %s, sd = %s)", slide_mean, slide_sd),
+    subtitle = "the inverse c. d. f.")
+```
+
+```{r}
+x <- tibble(
+  quantile = seq(from = slide_mean-5*slide_sd, to = slide_mean+5*slide_sd, by = slide_sd/100),
+  dnorm = dnorm(x = quantile, mean = slide_mean, sd = slide_sd)
+)
+gg3 <- ggplot(x) + geom_point(aes(quantile, dnorm)) +
+  geom_vline(xintercept = slide_mean, color = "blue") +
+  geom_label(aes(x = x, label = x), y = 0, data = tibble(x = slide_mean)) +
+  geom_vline(xintercept = slide_mean+slide_sd*c(-2, 2), color = "blue", linetype = "dashed") +
+  geom_label(
+    aes(x = x, label = label), y = 0, alpha = 0.5,
+    data = tibble(x = slide_mean+slide_sd*c(-2, 2), label = "2*sd")) +
+  labs(
+    title = sprintf("dnorm(x = quantile, mean = %s, sd = %s)", slide_mean, slide_sd),
+    subtitle = "the density function (p. f. or p. d. f.)")
+```
+
+```{r}
+x <- tibble(
+  rnorm = rnorm(n = 1E3, mean = slide_mean, sd = slide_sd)
+)
+gg4 <- ggplot(x, aes(rnorm)) + geom_histogram(bins = 30, color = "black", fill = "grey") +
+  geom_rug(alpha = 0.5) +
+  geom_vline(xintercept = slide_mean, color = "blue") +
+  geom_label(aes(x = x, label = x), y = 0, data = tibble(x = slide_mean)) +
+  geom_vline(xintercept = slide_mean+slide_sd*c(-2, 2), color = "blue", linetype = "dashed") +
+  geom_label(
+    aes(x = x, label = label), y = 0, alpha = 0.5,
+    data = tibble(x = slide_mean+slide_sd*c(-2, 2), label = "2*sd")) +
+  labs(
+    title = sprintf("rnorm(n = 1E3, mean = %s, sd = %s)", slide_mean, slide_sd),
+    subtitle = "a random variable having the specified distribution")
+```
+
+```{r, include=TRUE, echo=FALSE, fig.width=12, fig.height=7}
+plot_grid(gg1, gg2, gg3, gg4, ncol = 2, nrow = 2)
+```
+
+---
+
+# A parameterised normal distribution
+
+```{r}
+slide_mean <- 50; slide_sd <- 100;
+```
+
+Normal distribution parameterised with mean `r slide_mean` and standard deviation `r slide_sd`.
+
+```{r}
+x <- tibble(
+  quantile = seq(from = slide_mean-5*slide_sd, to = slide_mean+5*slide_sd, by = slide_sd/100),
+  pnorm = pnorm(q = quantile, mean = slide_mean, sd = slide_sd)
+)
+gg1 <- ggplot(x) + geom_point(aes(quantile, pnorm)) +
+  geom_vline(xintercept = slide_mean, color = "blue") +
+  geom_label(aes(x = x, label = x), y = 0, data = tibble(x = slide_mean)) +
+  geom_vline(xintercept = slide_mean+slide_sd*c(-2, 2), color = "blue", linetype = "dashed") +
+  geom_label(
+    aes(x = x, label = label), y = 0, alpha = 0.5,
+    data = tibble(x = slide_mean+slide_sd*c(-2, 2), label = "2*sd")) +
+  labs(
+    title = sprintf("pnorm(q = quantile, mean = %s, sd = %s)", slide_mean, slide_sd),
+    subtitle = "the cumulative distribution function (c. d. f.)")
+```
+
+```{r}
+x <- tibble(
+  quantile = seq(from = 0, to = 1, by = 0.01),
+  qnorm = qnorm(p = quantile, mean = slide_mean, sd = slide_sd)
+)
+gg2 <- ggplot(x) + geom_point(aes(quantile, qnorm)) +
+  geom_hline(yintercept = slide_mean, color = "blue") +
+  geom_label(aes(y = y, label = y), x = 0, data = tibble(y = slide_mean)) +
+  geom_hline(yintercept = slide_mean+slide_sd*c(-2, 2), color = "blue", linetype = "dashed") +
+  geom_label(
+    aes(y = y, label = label), x = 0, alpha = 0.5,
+    data = tibble(y = slide_mean+slide_sd*c(-2, 2), label = "2*sd")) +
+  labs(
+    title = sprintf("qnorm(p = quantile, mean = %s, sd = %s)", slide_mean, slide_sd),
+    subtitle = "the inverse c. d. f.")
+```
+
+```{r}
+x <- tibble(
+  quantile = seq(from = slide_mean-5*slide_sd, to = slide_mean+5*slide_sd, by = slide_sd/100),
+  dnorm = dnorm(x = quantile, mean = slide_mean, sd = slide_sd)
+)
+gg3 <- ggplot(x) + geom_point(aes(quantile, dnorm)) +
+  geom_vline(xintercept = slide_mean, color = "blue") +
+  geom_label(aes(x = x, label = x), y = 0, data = tibble(x = slide_mean)) +
+  geom_vline(xintercept = slide_mean+slide_sd*c(-2, 2), color = "blue", linetype = "dashed") +
+  geom_label(
+    aes(x = x, label = label), y = 0, alpha = 0.5,
+    data = tibble(x = slide_mean+slide_sd*c(-2, 2), label = "2*sd")) +
+  labs(
+    title = sprintf("dnorm(x = quantile, mean = %s, sd = %s)", slide_mean, slide_sd),
+    subtitle = "the density function (p. f. or p. d. f.)")
+```
+
+```{r}
+x <- tibble(
+  rnorm = rnorm(n = 1E3, mean = slide_mean, sd = slide_sd)
+)
+gg4 <- ggplot(x, aes(rnorm)) + geom_histogram(bins = 30, color = "black", fill = "grey") +
+  geom_rug(alpha = 0.5) +
+  geom_vline(xintercept = slide_mean, color = "blue") +
+  geom_label(aes(x = x, label = x), y = 0, data = tibble(x = slide_mean)) +
+  geom_vline(xintercept = slide_mean+slide_sd*c(-2, 2), color = "blue", linetype = "dashed") +
+  geom_label(
+    aes(x = x, label = label), y = 0, alpha = 0.5,
+    data = tibble(x = slide_mean+slide_sd*c(-2, 2), label = "2*sd")) +
+  labs(
+    title = sprintf("rnorm(n = 1E3, mean = %s, sd = %s)", slide_mean, slide_sd),
+    subtitle = "a random variable having the specified distribution")
+```
+
+```{r, include=TRUE, echo=FALSE, fig.width=12, fig.height=7}
+plot_grid(gg1, gg2, gg3, gg4, ncol = 2, nrow = 2)
+```
+
+---
+
+# A parameterised binomial distribution
+
+```{r}
+slide_size <- 50; slide_prob <- 0.1;
+```
+
+Binomial distribution parameterised with size `r slide_size` and probability `r slide_prob`.
+This distribution models an experiment where a coin is tossed 50 times, and the probability of observing head is 10%.
+
+```{r}
+x <- tibble(
+  quantile = seq(from = 0, to = slide_size, by = 1),
+  pbinom = pbinom(q = quantile, size = slide_size, prob = slide_prob)
+)
+gg1 <- ggplot(x) + geom_point(aes(quantile, pbinom)) +
+  labs(
+    title = sprintf("pbinom(q = quantile, size = %s, prob = %s)", slide_size, slide_prob),
+    subtitle = "the cumulative distribution function (c. d. f.)")
+```
+
+```{r}
+x <- tibble(
+  quantile = seq(from = 0, to = 1, by = 0.01),
+  qbinom = qbinom(p = quantile, size = slide_size, prob = slide_prob)
+)
+gg2 <- ggplot(x) + geom_point(aes(quantile, qbinom)) +
+  labs(
+    title = sprintf("qbinom(p = quantile, size = %s, prob = %s)", slide_size, slide_prob),
+    subtitle = "the inverse c. d. f.")
+```
+
+```{r}
+x <- tibble(
+  quantile = seq(from = 0, to = slide_size, by = 1),
+  dbinom = dbinom(x = quantile, size = slide_size, prob = slide_prob)
+)
+gg3 <- ggplot(x) + geom_point(aes(quantile, dbinom)) +
+  labs(
+    title = sprintf("dbinom(x = quantile, size = %s, prob = %s)", slide_size, slide_prob),
+    subtitle = "the density function (p. f. or p. d. f.)")
+```
+
+```{r}
+x <- tibble(
+  rbinom = rbinom(n = 1E3, size = slide_size, prob = slide_prob)
+)
+gg4 <- ggplot(x, aes(rbinom)) + geom_histogram(bins = 30, color = "black", fill = "grey") +
+  labs(
+    title = sprintf("rbinom(n = 1E3, size = %s, prob = %s)", slide_size, slide_prob),
+    subtitle = "a random variable having the specified distribution")
+```
+
+```{r, include=TRUE, echo=FALSE, fig.width=12, fig.height=7}
+plot_grid(gg1, gg2, gg3, gg4, ncol = 2, nrow = 2)
+```
+
+---
+
+# <i class="fab fa-r-project"></i> Functions for Statistical Testing
+
+```{r, include=TRUE, echo=FALSE, results='asis'}
+cat(paste(sprintf("`%s`", sort(grep("test$", ls("package:stats"), value=TRUE))), collapse = ", "))
+```
+
+---
+
+# The five steps of hypothesis testing
+
+## General principles of hypothesis testing
+
+1. Decide on the effect that you are interested in, **design** a suitable experiment or study, pick a data summary function and test statistic.
+
+2. Set up a **null hypothesis**, which is a simple, computationally tractable model of reality that lets you compute the null distribution, i.e., the possible outcomes of the test statistic and their probabilities under the assumption that the null hypothesis is true.
+
+3. Decide on the **rejection region**, i.e., a subset of possible outcomes whose total probability is small.
+
+4. Do the experiment and collect the data; compute the **test statistic**.
+
+5. Make a **decision**: reject the null hypothesis if the test statistic is in the rejection region.
+
+---
+
+# Knowledge assumptions - Central tendency
+
+Tests make assumptions that must be met to for the results to be interpreted properly and with validity.
+
+For instance, Student's t-Test expects values to be located around a central or typical value.
+
+.pull-left[
+```{r, echo=FALSE, include=TRUE, fig.height=5}
+x_mean <- 0
+x_sd <- 20
+data_table <- tibble(x = as.integer(rnorm(n = 10E3, mean = x_mean, sd = x_sd)))
+summary_table <- bind_rows(
+  tibble(Value = "mean", value = mean(data_table$x)),
+  tibble(Value = "median", value = median(data_table$x)),
+  tibble(Value = "mode", value = as.integer(names(which.max(table(data_table$x)))))
+)
+data_table %>% 
+  ggplot() +
+  geom_histogram(aes(x = x), color = "black", fill = "grey") +
+  geom_vline(aes(xintercept = value, color = Value), summary_table, size = 2, alpha = 0.3)
+```
+]
+
+.pull-right[
+Measures of central tendency include:
+
+.large-list[
+- the arithmetic mean
+- the median
+- the mode<sup>1</sup>
+]
+]
+
+.footnote[
+1. R does not have a standard in-built function to calculate mode.
+  Instead, `mode()` allows users to get or set the type or _storage mode_ of an object.
+]
+
+---
+
+# Knowledge assumptions - Normality
+
+In addition, Student's t-Test also expects values to be normally distributed.
+
+.pull-left[
+## Normal distribution
+
+.small-code[
+```{r include=TRUE}
+x <- rnorm(n = 5000, mean = 0, sd = 1)
+```
+
+```{r, include=TRUE, echo=FALSE, fig.height=3}
+ggplot(tibble(x=x)) +
+  geom_histogram(aes(x), fill = "grey", color = "black", bins = 20) +
+  theme_cowplot()
+```
+
+```{r, include=TRUE, fig.height=5}
+shapiro.test(x)
+```
+]
+]
+
+.pull-right[
+## Log-normal distribution
+
+.small-code[
+```{r, include=TRUE}
+x <- 2^rnorm(n = 5000, mean = 0, sd = 1)
+```
+
+```{r, include=TRUE, echo=FALSE, fig.height=3}
+ggplot(tibble(x=x)) +
+  geom_histogram(aes(x), fill = "grey", color = "black", bins = 20) +
+  theme_cowplot()
+```
+
+```{r, include=TRUE, fig.height=5}
+shapiro.test(x)
+```
+]
+]
+
+---
+
+# Knowledge assumptions - Normality
+
+The Quantile-Quantile Plots (QQ plot) contrasts the quantiles of the observed distribution to those of a theoretical distribution.
+
+.pull-left[
+## Normal distribution
+
+.small-code[
+```{r, include=TRUE, echo=TRUE, fig.height=5}
+x <- rnorm(n = 5000, mean = 5, sd = 3)
+qqnorm(x)
+```
+]
+]
+
+.pull-right[
+## Log-normal distribution
+
+.small-code[
+```{r, include=TRUE, echo=TRUE, fig.height=5}
+x <- 2^rnorm(n = 5000, mean = 0, sd = 1)
+qqnorm(x)
+```
+]
+]
+
+---
+
+# Parametric tests and Non-parametric equivalents
+
+```{r}
+tibble(
+  "Parametric test" = c(
+    "Paired t-test",
+    "Unpaired t-test",
+    "Pearson correlation",
+    "One-way Analysis of Variance"),
+  "Non-parametric equivalent" = c(
+    "Wilcoxon Rank sum test",
+    "Mann-Whitney U test",
+    "Spearman correlation",
+    "Kruskal–Wallis test")
+) %>% knitr::kable()
+```
+
+When parametric assumptions are not met, non-parametric tests equivalent should be used.
+
+.large-table[
+|Parametric test              |Non-parametric equivalent |
+|:----------------------------|:-------------------------|
+|Paired t-test                |Wilcoxon Rank sum test    |
+|Unpaired t-test              |Mann-Whitney U test       |
+|Pearson correlation          |Spearman correlation      |
+|One-way Analysis of Variance |Kruskal–Wallis test       |
+]
+
+--
+
+Non-parametric tests make fewer assumptions, as such:
+
+- they have wider applicability.
+- they may be applied in situations where less is known about the data.
+- they are more robust.
+- ..., however, fewer assumption gives non-parametric tests _less_ power than their parametric equivalent.
+
+???
+
+**Credits:** [https://www.healthknowledge.org.uk/](https://www.healthknowledge.org.uk/public-health-textbook/research-methods/1b-statistical-methods/parametric-nonparametric-tests)
+
+---
+
+# Parametric t-test
+
+.pull-left[
+## Two normal distributions
+
+```{r, include=TRUE}
+set.seed(10)
+x <- rnorm(n = 50, mean = 0, sd = 1)
+y <- rnorm(n = 50, mean = 1, sd = 1)
+```
+
+```{r, include=TRUE, echo=FALSE, fig.height=5}
+test_data <- bind_rows(
+  tibble(group = "x", value = x),
+  tibble(group = "y", value = y)
+)
+ggplot(test_data, aes(group, value)) +
+  geom_jitter(width = 0.1)
+```
+]
+
+--
+
+.pull-right[
+## Unpaired t-test
+
+.x-small-code[
+```{r, include=TRUE}
+t.test(value ~ group, test_data)
+```
+]
+]
+
+---
+
+# Non-parametric wilcoxon test
+
+.pull-left[
+## Two uniform distributions
+
+```{r, include=TRUE}
+set.seed(10)
+x <- runif(n = 50, min = 1, max = 11)
+y <- runif(n = 50, min = 3, max = 13)
+```
+
+```{r, include=TRUE, echo=FALSE, fig.height=5}
+test_data <- bind_rows(
+  tibble(group = "x", value = x),
+  tibble(group = "y", value = y)
+)
+gg <- ggplot(test_data, aes(group, value)) +
+  geom_jitter(width = 0.1)
+gg
+```
+]
+
+--
+
+.pull-right[
+## Mann-Whitney U test
+
+.x-small-code[
+```{r, include=TRUE}
+wilcox.test(value ~ group, test_data)
+```
+]
+
+## Directed hypothesis
+
+.x-small-code[
+```{r, include=TRUE}
+wilcox.test(value ~ group, test_data, alternative = "less")
+```
+]
+]
+
+---
+
+# Non-parametric wilcoxon test
+
+.pull-left[
+## Two uniform distributions
+
+```{r, include=TRUE}
+set.seed(10)
+x <- runif(n = 50, min = 1, max = 11)
+y <- runif(n = 50, min = 3, max = 13)
+```
+
+```{r, include=TRUE, echo=FALSE, fig.height=5}
+gg
+```
+]
+
+.pull-right[
+## Parametric (unpaired) t-test
+
+.x-small-code[
+```{r, include=TRUE}
+t.test(value ~ group, test_data)
+```
+]
+
+**Warning:** Beware of interpreting inadequate tests!
+]
+
+---
+
+# Paired test
+
+For each sample, the two measurements are related to one another; e.g. patients measured before and after a treatment.
+
+.pull-left[
+.small-code[
+```{r, include=TRUE}
+set.seed(10)
+n_sample <- 50
+x <- runif(n = n_sample, min = 10, max = 20)
+y <- x + 2 + rnorm(n = n_sample, mean = 0, sd = 1)
+```
+]
+
+```{r}
+test_data <- tibble(
+  sample = paste("sample", seq_len(n_sample)),
+  x = x,
+  y = y
+) %>% pivot_longer(cols = c(x, y), names_to = "variable")
+```
+
+```{r, include=TRUE, echo=FALSE, fig.height=5}
+ggplot(test_data, aes(variable, value)) +
+  geom_line(aes(group = sample), size = 0.1) +
+  geom_point()
+```
+]
+
+--
+
+.pull-right[
+.small-code[
+```{r, include=TRUE}
+t.test(value ~ variable, test_data, paired = TRUE)
+```
+]
+
+**Note:**
+What is actually tested is whether the mean of the differences between the paired $x$ and $y$ measurements is different from 0.
+]
+
+---
+
+# Multiple-testing correction
+
+## Hypothesis
+
+"Jelly beans cause acne."
+
+## Results
+
+.pull-left[
+- No link between jelly beans and acne.
+]
+
+.pull-right[
+- No link between _brown_ jelly beans and acne.
+- No link between _pink_ jelly beans and acne.
+- ...
+- Link between _green_ jelly beans and acne.
+]
+
+## News
+
+> Green jelly beans linked to acne!
+  95% confidence!
+  Only 5% chance of coincidence!
+
+.footnote[
+[https://xkcd.com/882/](https://imgs.xkcd.com/comics/significant.png)
+]
+
+---
+
+# Multiple-testing correction
+
+.pull-left[
+Distribution of $p$-values in an RNA-seq differential expression experiment
+
+- True positive
+- True negative
+- False positive (type I error)
+- False negative (type I error)
+
+```{r, include=TRUE, echo=FALSE, fig.align='center', out.height='300px'}
+knitr::include_graphics("https://www.huber.embl.de/msmb/figure/chap14-mt-awpvhist-1.png")
+```
+]
+
+.pull-right[
+.center[
+Bonferroni correction
+]
+
+```{r, include=TRUE, echo=FALSE, fig.align='center', out.height='200px'}
+knitr::include_graphics("https://www.huber.embl.de/msmb/figure/chap14-mt-bonferroni-1.png")
+```
+
+.center[
+Benjamini-Hochberg procedure
+]
+
+```{r, include=TRUE, echo=FALSE, fig.align='center', out.height='200px'}
+knitr::include_graphics("https://www.huber.embl.de/msmb/figure/chap14-mt-BH-1.png")
+```
+]
+
+???
+
+BH: Assuming no effect whatsoever, the p-values are expected to be uniformly distributed between 0 and 1.
+That is, if you rank p-values in increasing order, you should see them increase uniformly from 0 to 1.
+But if there is an effect, the associated p-values will be lower than expected by chance.
+This is what the BH procedure is about:
+
+- First, order the p-values in increasing order
+- For a choice of FDR, find the largest p-value that is less than expected by chance
+- Reject hypotheses until that p-value
+
+---
+
+# Multiple-testing correction
+
+```{r}
+set.seed(10)
+n_tests <- 1000
+compute_p_value <- function(dummy) {
+  x <- rnorm(n = 100, mean = 0, sd = 1)
+  y <- rnorm(n = 100, mean = 0, sd = 1)
+  out <- t.test(x, y)
+  out$p.value
+}
+result_table <- tibble(
+  pvalue = vapply(X = seq_len(n_tests), FUN = compute_p_value, FUN.VALUE = numeric(1)),
+  BH = p.adjust(p = pvalue, method = "BH"),
+  bonferroni = p.adjust(p = pvalue, method = "bonferroni")
+)
+```
+
+.pull-left[
+Let us carry `r n_tests` tests between two normal distributions of mean 0 and standard deviation 1.
+
+```{r, include=TRUE, echo=FALSE, fig.height=3}
+data_table <- tibble(
+  x = rnorm(n = 100, mean = 0, sd = 1),
+  y = rnorm(n = 100, mean = 0, sd = 1)
+) %>% pivot_longer(cols = c(x, y))
+ggplot(data_table) +
+  geom_boxplot(aes(name, value)) +
+  geom_jitter(aes(name, value), width = 0.1)
+```
+
+```{r, include=TRUE, echo=FALSE, fig.height=3}
+ggplot(result_table) +
+  geom_histogram(aes(pvalue), fill = "grey", color = "black", breaks = seq(0, 1, 0.05)) +
+  scale_x_continuous(limits = c(0, 1)) +
+  labs(title = "Raw p-value")
+```
+
+```{r, include=TRUE, echo=FALSE, results='asis'}
+cat(sprintf("There are %i raw p-values smaller than 0.05", sum(result_table$pvalue < 0.05), n_tests))
+```
+]
+
+.pull-right[
+```{r, include=TRUE, echo=FALSE, fig.height=3}
+ggplot(result_table) +
+  geom_histogram(aes(BH), fill = "grey", color = "black", bins = 20) +
+  coord_cartesian(xlim = c(0, 1)) +
+  labs(title = "BH correction")
+```
+
+```{r, include=TRUE, echo=FALSE, results='asis'}
+cat(sprintf("There are %i BH-corrected p-values smaller than 0.05", sum(result_table$BH < 0.05)))
+```
+
+```{r, include=TRUE, echo=FALSE, fig.height=3}
+ggplot(result_table) +
+  geom_histogram(aes(bonferroni), fill = "grey", color = "black", bins = 20) +
+  coord_cartesian(xlim = c(0, 1)) +
+  labs(title = "bonferroni correction")
+```
+
+```{r, include=TRUE, echo=FALSE, results='asis'}
+cat(sprintf("There are %i bonferonni corrected p-values smaller than 0.05", sum(result_table$bonferroni < 0.05)))
+```
+]
+
+---
+
+# Fisher's Exact Test
+
+- Test of independence between two categorical variables
+
+- Alternative to the Chi-square test when the sample is not large enough.
+
+  + Rule of thumb: when any of the _expected_ values in the contingency table is less than 5.
+
+  + e.g., Gene set over-representation analysis (ORA)
+
+.pull-left[
+```{r, include=TRUE, echo=FALSE}
+knitr::include_graphics("https://www.pathwaycommons.org/guide/primers/statistics/fishers_exact_test/table_1.png")
+```
+]
+
+.pull-right[
+```{r, include=TRUE, echo=FALSE}
+knitr::include_graphics("https://seqqc.files.wordpress.com/2019/07/screenshot-2019-07-25-at-14.30.54.png?w=300&h=253")
+```
+]
+
+.footnote[
+Further reading: [Towards data science](https://towardsdatascience.com/fishers-exact-test-in-r-independence-test-for-a-small-sample-56965db48e87)
+]
+
+---
+
+# Fisher's Exact Test
+
+```{r}
+knitr::kable(tibble::tribble(
+  ~Men, ~Women, ~Row.total,
+    1L,     9L,        10L,
+   11L,     3L,        14L,
+   12L,    12L,        24L
+  ))
+```
+
+| Men| Women| Row.total|
+|---:|-----:|---------:|
+|   1|     9|        10|
+|  11|     3|        14|
+|  12|    12|        24|
+
+Knowing that 10 of these 24 teenagers are studying, and that 12 of the 24 are female, and assuming the null hypothesis that men and women are equally likely to study, what is the probability that these 10 teenagers who are studying would be so unevenly distributed between the women and the men?
+
+```{r, include=TRUE, echo=FALSE, out.height="100px", fig.align='center'}
+knitr::include_graphics("https://wikimedia.org/api/rest_v1/media/math/render/svg/355286b9e9fdc48395ff99ab24694092ee8f5b49")
+```
+
+<br/>
+
+```{r, include=TRUE, echo=FALSE, out.height="50px", fig.align='center'}
+knitr::include_graphics("https://wikimedia.org/api/rest_v1/media/math/render/svg/dd800d46585be53665dfbb75291aeee58a279cd9")
+```
+
+---
+
+# Linear models
+
+Describe a continuous response variable as a function of one or more predictor variables.
+
+.pull-left[
+```{r}
+set.seed(10)
+test_data <- tibble(
+  x = rnorm(n = 50, mean = 0, sd = 1),
+  y = 10 + 2.5 * x + rnorm(n = 50, mean = 0, sd = 0.5))
+```
+
+```{r, include=TRUE, echo=FALSE, fig.height=4}
+ggplot(test_data, aes(x = x, y = y)) +
+  geom_point() +
+  stat_smooth(method = "glm", se = FALSE)
+```
+
+- What is the slope?
+- What is the intercept?
+]
+
+--
+
+.pull-right[
+```{r, include=TRUE}
+lm(y ~ x, test_data)
+```
+]
+
+---
+
+# Linear models - Summary
+
+.small-code[
+```{r, include=TRUE}
+lm(y ~ x, test_data) %>% summary()
+```
+]
+
+---
+
+# Exercises: the normal distribution
+
+- Generate a vector of 1000 normally distributed values with mean 10 and standard deviation 5.
+
+- Print summary statistics about those values.
+
+- Verify the mean and standard deviation. Inspect the deciles of those values.
+
+- Visualise the distribution of those values.
+  Draw vertical lines to indicate the mean and 1 standard deviation either side. Bonus point if the lines are colored.
+  
+  + Using base R.
+  
+  + Using `ggplot`.
+
+- Verify that approximately 64% and 95% of the values are within 1 and 2 standard deviations of the mean, respectively.
+
+- Generate a new vector with _a lot_ more values (e.g., one million).
+  Draw again a histogram.
+  Does the distribution look better? worse?
+
+---
+
+# Exercises: probabilities
+
+For the standard normal distribution ${\mathcal {N}}(\mu=0 ,\sigma ^{2}=1)$
+
+- Plot the cumulative distribution function in the range $[-5, 5]$.
+
+- Plot the density function in the range $[-5, 5]$.
+
+- What is the probability of observing a value greater than 2?
+
+- What is the probability of observing a value between -2 and 2?
+
+- What is the probability of observing a value more extreme than -2 or 2?
+
+---
+
+# Exercises: statistical testing
+
+- In the `iris` dataset, visualise the distribution of sepal length stratified by species.
+
+- Print summary statistics for each column in the dataset.
+
+  + How many species are there in the dataset?
+    What are their names?
+    How many observations do we have for each species?
+
+- Is the sepal length normally distributed overall? Within each species?
+
+- Is there a significant variation between the sepal length between the different species?
+
+- Do `setosa` and `versicolor` species have significantly different sepal length?
+
+---
+
+# Exercises: multiple testing
+
+Use the `ALL` microarray gene expression dataset in the `r BiocStyle::Biocpkg("ALL")` package.
+The normalized expression data is stored in `exprs(ALL)`.
+Sample metadata is stored in `pData(ALL)`
+
+Use the following code to select samples from B-cell lymphomas harboring the BCR/ABL translocation and from lymphomas with no observed cytogenetic abnormalities (NEG).
+
+.small-code[
+```{r, echo=TRUE, include=TRUE}
+bcell = grep("^B", as.character(ALL$BT))
+moltyp = which(as.character(ALL$mol.biol) %in% c("NEG", "BCR/ABL"))
+ALL_bcrneg = ALL[, intersect(bcell, moltyp)]
+ALL_bcrneg$mol.biol = factor(ALL_bcrneg$mol.biol)
+```
+]
+
+- Test each microarray probeset between patients who achieved remission and those who were refractory to treatment.
+
+- Correct p-values for multiple testing.
+  How many probesets remain significant?
+
+- Plot the expression of the most significant probeset in the two groups of samples.
+
+- Bonus point: Does the most significant probeset map to a gene? If so, which one?
+
+- Visualise the distribution of unadjusted p-values for the two probesets with high and low variance.
+  How would you use variance be used to reduce the burden of multiple testing correction?
+
+---
+
+# Exercises: Over-representation analysis (ORA)
+
+Use the following code to fetch the list of Gene Ontology Biological Processes, and associated probeset identifiers.
+
+.small-code[
+```{r, echo=TRUE, include=TRUE}
+library(hgu95av2.db)
+go_table <- hgu95av2GO2ALLPROBES %>% 
+  as.data.frame() %>% 
+  as_tibble() %>% 
+  filter(Ontology == "BP") %>% 
+  dplyr::select(probe_id, go_id) %>% 
+  unique()
+go_list <- split(x = go_table$probe_id, f = go_table$go_id)
+```
+]
+
+- Identify GO categories over-represented in the set of DE probesets identified in the previous slide.
+  
+  + Save computational time: Focus on GO categories with more than 10 probesets.
+
+- What is the top hit?
+  Does it makes sense / match existing literature?
+
+---
+
+# Exercises: linear regression models
+
+- Estimate a simple linear regression model that explains the expression level for probeset "1636_g_at" by the molecular biology of the cancer factor, `mol.biol`.
+  Save the model as `ALL_bcrneg_mod`.
+
+- Print a summary of the coefficients for the linear model.
+
+- Visualise the two variables in a plot.
+  Indicate the intercept of the linear model, and the effect of the BCR/ABL mutation.
+
+---
+
+# Exercises: linear regression models
+
+- Regress the expression level for probeset "1636_g_at" by
+  the molecular biology of the cancer factor, `mol.biol`
+  the age of the patient, `age`,
+  and whether the patient received a bone marrow transplant or not, `transplant`.
+  Save the model as `mod`.
+  Put differently, estimate the model:
+
+$${1636\_g\_at_i = \beta_0 + \beta_1 mol.biol + \beta_2 age + \beta_3 transplant + u_i}$$
+
+- What is the effect of each explanatory variable on the gene expression?
+
+- Visualise the relationship between significant explanatory variables and gene expression.
+
+- Can you make a hypothesis about any interaction between explanatory variables that has an effect on gene expression?
+  How would you test such a hypothesis?
+
+---
+
+# Further reading
+
+- [UCLouvain Bioinformatics Summer School 2019](https://uclouvain-cbio.github.io/BSS2019/)
+
+  + [Introduction to Statistics and Machine Learning](https://github.com/ococrook/2019-BSS/raw/master/Intro2statsml.pdf) by Oliver M. Crook
+  
+  + [Practical: stats/ML](https://htmlpreview.github.io/?https://github.com/ococrook/2019-BSS/blob/master/practical/Intro2statmlPractical.html)
+
+- [CSAMA](https://github.com/Bioconductor/CSAMA/tree/2019/lecture/1-monday) by the European Molecular Biology Laboratory (EMBL).
+
+- [Statistic with R and dplyr and ggplot](https://www.youtube.com/watch?v=ANMuuq502rE) by Greg Martin
+
+- [Susan Holmes](http://statweb.stanford.edu/~susan/) - [Introduction to Statistics for Biology and Biostatistics](http://statweb.stanford.edu/~susan/courses/s141/)
+
+- Susan Holmes & Wolfgang Huber - [Modern Statistics for Modern Biology: Testing](https://www.huber.embl.de/msmb/Chap-Testing.html)
+
+- [Bioconductor Case Studies](https://www.bioconductor.org/help/publications/books/bioconductor-case-studies/)
+
+- [Introduction to Econometrics with R](https://www.econometrics-with-r.org/6-6-exercises-4.html)
+
+---
+
+# Machine learning using the caret package
+
+The `r BiocStyle::CRANpkg("caret")` package (short for **C**lassification **A**nd **RE**gression **T**raining) is a set of functions that attempt to streamline the process for creating predictive models.
+It is the R
+
+The package contains diverse functionality, including tools for:
+
+- data splitting
+
+- pre-processing
+
+- feature selection
+
+- model tuning using resampling
+
+- variable importance estimation
+
+---
+
+# Training models using caret
+
+## Partition dataset in training and test sets
+
+```{r, include=TRUE}
+set.seed(998)
+inTraining <- createDataPartition(iris$Species, p = .75, list = FALSE)
+training <- iris[ inTraining,]
+testing  <- iris[-inTraining,]
+```
+
+.pull-left[
+## Set the training parameters
+
+```{r, include=TRUE}
+fitControl <- trainControl(
+  ## bootstrap
+  method = "boot",
+  ## repeated ten times
+  number = 5)
+```
+]
+
+.pull-right[
+## Train the model
+
+```{r, include=TRUE}
+knnFit <- train(
+  Species ~ ., data = training, 
+  method = "knn", 
+  trControl = fitControl,
+  tuneGrid = data.frame(
+    k = c(1, 2, 5, 10, 20, 50)))
+```
+
+]
+
+---
+
+# Visualising model performance in caret
+
+```{r, include=TRUE, fig.align='center', out.height='400px'}
+ggplot(knnFit)
+```
+
+---
+
+# Apply a model to make predictions on new data
+
+## Make predictions
+
+```{r, include=TRUE}
+knnPred <- predict(knnFit, newdata = testing)
+```
+
+## Measure performance
+
+```{r, include=TRUE}
+confusionMatrix(data = knnPred, testing$Species)$table
+```
+
+```{r, include=TRUE}
+confusionMatrix(data = knnPred, testing$Species)$overall["Accuracy"]
+```
+
+---
+
+# Further reading
+
+- The caret Package: [https://topepo.github.io/caret/](https://topepo.github.io/caret/)
+
+- Cheatsheet for Scikit-learn (Python) & caret (R) packages, by [Kunal Jain](https://www.analyticsvidhya.com/blog/2016/12/cheatsheet-scikit-learn-caret-package-for-python-r-respectively/)
+
+- Machine Learning with Python scikit-learn Vs R Caret, by [Fisseha Berhane](https://datascience-enthusiast.com/R/ML_python_R_part1.html)
+
+- Machine Learning with caret in R [DataCamp](https://www.datacamp.com/courses/machine-learning-toolbox)
+
+- 238 models available in caret: [https://topepo.github.io/](https://topepo.github.io/caret/available-models.html)
+
+---
+
+# Exercise: Machine learning
+
+```r
+library(ExperimentHub)
+ehub <- ExperimentHub()
+logcounts <- ehub[["EH3094"]] # logcounts
+col_data <- ehub[["EH3095"]] # colData
+```
+
+We aim to predict the `label.main` covariate using gene expression.
+
+1. Subset the dataset to a reasonable number of variable genes.
+
+2. Set up training and testing data subsets.
+
+3. Train a random forest classifier over a grid of parameters, and evaluate it on training and test datasets.
+
+4. Train a $k$ nearest neighbors classifier over a grid of parameters, and compare it to the random forest.
+
+5. Experiment with more classifiers.
