@@ -1,0 +1,324 @@
+---
+title: "StatsinR.Rmd"
+author: "rhodgson"
+date: "28/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Exercise 1:
+Generate a vector of 1000 normally distributed values with mean 10 and standard deviation 5.
+Print summary statistics about those values.
+```{r}
+x <- rnorm(n=1000, mean=10, sd=5)
+summary(x)
+```
+Verify the mean and standard deviation. Inspect the deciles of those values. - quantile gives you the first 0-25-50-75-100 quantiles
+Orders your data by section
+```{r}
+mean(x)
+sd(x)
+quantile(x)
+#deciles 
+
+#quantiles(x, probs= seq(0,1,0.1)
+```
+Visualise the distribution of those values. Draw vertical lines to indicate the mean and 1 standard deviation either side. Bonus point if the lines are colored.
+1. Using base R.
+```{r}
+hist(x, breaks=30)
+abline(v=mean(x), col="blue")
+abline(v=(mean(x)+sd(x)), col="red")
+abline(v=(mean(x)-sd(x)), col="red")
+```
+
+
+2. Using ggplot .
+```{r}
+library(ggplot2)
+```
+
+```{r}
+x_df <- as.data.frame(x)
+ggplot(x_df, aes(x=x))+
+  geom_histogram()+
+  geom_vline(aes(xintercept=mean(x)),color="blue", linetype="dashed", size=1)+
+  geom_vline(aes(xintercept=sd(x)),color="red", linetype="dashed", size=1)+
+  geom_vline(aes(xintercept=mean(x)+sd(x)),color="red", linetype="dashed", size=1)
+
+```
+
+Verify that approximately 64% and 95% of the values are within 1 and 2 standard deviations of the mean, respectively.
+
+```{r}
+percent1sd <- sum(x_df$x>=mean(x)-sd(x) & x_df$x<= mean(x)+sd(x))/(length(x_df$x))*100 
+    
+percent1sd
+
+
+percent_2sd <- sum(x_df$x>=mean(x)-2*sd(x) & x_df$x<=mean(x)+2*sd(x))/(length(x_df$x))*100
+percent_2sd
+```
+
+Generate a new vector with a lot more values (e.g., one million). Draw again a histogram. Does the distribution look better? worse?
+```{r}
+x_large <- rnorm(n = 1000000, mean = 10, sd = 5)
+x_large_data <- data.frame(x=x_large)
+ggplot(x_large_data, aes(x=x_large))+
+  geom_histogram(bins = 100)+
+  geom_vline(xintercept=mean(x), color="blue")+
+  geom_vline(xintercept=mean(x) + c(-1, 1)*sd(x), color="red")
+
+```
+
+
+#Statistical testing for iris data set
+In the iris dataset, visualise the distribution of sepal length stratified by species.
+
+```{r}
+data(iris)
+ggplot(iris, aes(x=Sepal.Length))+geom_histogram()+
+facet_wrap(~ Species)
+
+```
+Overlay by specifying column is 1
+```{r}
+data(iris)
+ggplot(iris, aes(x=Sepal.Length))+
+  geom_histogram()+
+  facet_wrap(~ Species, ncol=1)
+```
+
+
+Print summary statistics for each column in the dataset.
+How many species are there in the dataset? What are their names? How many observations do
+we have for each species?
+```{r}
+summary(iris)
+```
+
+Is the sepal length normally distributed overall? Within each species?
+Can I use shapiro test here
+
+```{r}
+library(tidyverse)
+Sepallength <- iris %>% group_by(Species) %>% select() 
+
+shapiro.test(iris$Sepal.Length) 
+```
+for filter(species == "A"):
+```{r}
+#species <- levels(iris$Species)
+#species
+iris_setosa <- iris %>% filter(Species == "setosa")
+iris_setosa <- iris_setosa$Sepal.Length
+shapiro.test(iris_setosa)
+
+#virginica
+iris_virginica <- iris %>% filter(Species == "virginica")
+iris_virginica <- iris_virginica$Sepal.Length
+shapiro.test(iris_virginica)
+#Do this for versicolor
+iris_versicolor <- iris %>% filter(Species == "versicolor")
+iris_versicolor <- iris_versicolor$Sepal.Length
+shapiro.test(iris_versicolor)
+```
+```{r}
+iris_virginica
+```
+
+Fancy for loop doing the same thing
+ie. for each species of the levels Species, print the species, filter by Species, pull the Sepal.Length column and perform the shapiro test on each set
+```{r}
+for (species in levels(iris$Species)) {
+  print(species)
+  iris %>%
+    filter(Species == species) %>%
+    pull(Sepal.Length) %>%
+    shapiro.test() %>%
+    print()
+}
+```
+
+```{r}
+shapiro.test(iris$Sepal.Length)
+```
+Looks fine and normally distributed
+
+Next:
+Is there a significant variation between the sepal length between the different species? 
+
+Use Kevin's for loop to do this (feeding into the var() function)
+No this isnt right, we want to use anova here instead
+```{r}
+for (species in levels(iris$Species)) {
+  print(species)
+  iris %>%
+    filter(Species == species) %>%
+    pull(Sepal.Length) %>%
+    var() %>%
+    print()
+}
+```
+Compute the analysis of variance res.aov <- aov(weight ~ group, data = my_data) # Summary of the analysis summary(res.aov)
+
+stars show yes species affected distribution of sepal length 
+quick way of showing distribution 
+```{r}
+anova <- aov(Sepal.Length ~ Species, data = iris)
+anova
+summary(anova)
+```
+Easy way to compare separate easily (previously made vectors of just sepal_length for each one)
+```{r}
+t.test(x= iris_setosa, y=iris_versicolor)
+```
+
+Do setosa and versicolor species have significantly different sepal length?
+can use the same syntax of anova test (the ~ is a formal says left is predictor and right side is the independent)
+filter N then test
+```{r}
+iris_sv <- iris %>% filter(Species == "setosa"|Species == "virginica") 
+
+t.test(Sepal.Length ~ Species, data=iris_sv)
+```
+
+Pulling only works on one column so we lost the species info here - doing a t test on one sample. This doesn't work 
+```{r}
+iris %>% filter(Species == "setosa" | Species == "virginica") %>% pull(Sepal.Length) %>%
+  t.test()
+```
+. means data coming from the pipe. 
+```{r}
+iris %>% filter(Species == "virginica"|Species == "setosa") %>% t.test(Sepal.Length ~ Species, data= . )
+
+```
+#Multiple testing
+Use the ALL microarray gene expression dataset in the ALL package. The normalized expression data is stored in exprs(ALL) . Sample metadata is stored in pData(ALL)
+```{r}
+BiocManager::install("ALL")
+library(ALL)
+```
+
+
+```{r}
+data(ALL)
+head(exprs(ALL))
+```
+
+
+Use the following code to select samples from B-cell lymphomas harboring the BCR/ABL translocation and from lymphomas with no observed cytogenetic abnormalities (NEG).
+
+```{r}
+bcell = grep("^B", as.character(ALL$BT))
+moltyp = which(as.character(ALL$mol.biol) %in% c("NEG", "BCR/ABL"))
+ALL_bcrneg = ALL[, intersect(bcell, moltyp)]
+ALL_bcrneg$mol.biol = factor(ALL_bcrneg$mol.biol)
+str(ALL_bcrneg)
+```
+
+Assume all normally distributed
+Test each microarray probeset between patients who achieved remission and those who were refractory to treatment.
+
+Test each row in dataframe, see if its signatificantly differ
+Take first row i matrix and test between two groups
+
+1 probe (row)
+2 groups of samples, 
+```{r}
+exprs(ALL_bcrneg[1])
+
+#View(a)
+```
+Filter first row (1 gene) and give a new column on mol_status is the molbiol col
+```{r}
+ALL_df <- data.frame(gene =exprs(ALL_bcrneg)[1,], mol_status = ALL_bcrneg$mol.biol)
+
+ALL_df
+```
+Now to do t test
+```{r}
+t<- t.test(gene ~ mol_status, data= ALL_df)
+str(t)
+```
+Class htest - allows oyu to give summary
+Can also look in this and extract certain parts
+```{r}
+pval_1 <- t$p.value
+pval_1
+```
+Now want to do this for every gene in data set using sapply function
+
+Define our test_probe function so we will give a vector of values in the row
+x will become our values
+```{r}
+test_probe <- function(x){
+  ALL_df <- data.frame(gene =x, mol_status = ALL_bcrneg$mol.biol) 
+  t <- t.test(gene ~ mol_status, data= ALL_df)
+  p_x <- t$p.value
+  return(p_x)
+}
+```
+
+
+Apply function
+
+```{r}
+
+pvalues_combined <- apply(exprs(ALL_bcrneg), 1, test_probe)
+head(pvalues_combined)
+```
+
+
+
+```{r}
+#hist(pvalues_combined)
+pvalues_combined_df <- as.data.frame(pvalues_combined)
+colnames(pvalues_combined_df)
+ggplot(pvalues_combined_df, aes(x=pvalues_combined))+geom_histogram()
+```
+For each p values, is it less than 0.05 and how many are there?
+This is a good sign there there is something to look at 
+```{r}
+length(pvalues_combined[pvalues_combined<0.05])
+```
+Dharam's way of doing this
+```{r}
+pvalues_combined_df %>%filter(pvalues_combined <= 0.05) %>% nrow()
+```
+
+Correct p-values for multiple testing. How many probesets remain significant? Using the Benjiman Hochberg
+
+```{r}
+
+p_adjust <- p.adjust(pvalues_combined, method = "BH", n = length(pvalues_combined))
+plot(pvalues_combined, p_adjust)
+```
+How many probset are still significant?
+```{r}
+length(p_adjust[p_adjust<0.05])
+hist(p_adjust)
+abline(v=0.05, col="red")
+```
+Plot the expression of the most signficant probeset in the two groups of samples.
+
+Find the value with smallest p number
+```{r}
+p_adjust[which.min(p_adjust)]
+```
+Mapping with gene entries etc
+maps probes of microarray to gene identifiers
+```{r}
+#BiocManager::install("hgu95av2.db")
+library(hgu95av2.db)
+AnnotationDbi::select(hgu95av2.db, top_probeset=1636_g_at , columns = "SYMBOL")
+
+```
+
+
+Bonus point: Does the most signi cant probeset map to a gene? If so, which one?
+Visualise the distribution of unadjusted p-values for the two probesets with high and low variance.
+How would you use variance be used to reduce the burden of multiple testing correction
