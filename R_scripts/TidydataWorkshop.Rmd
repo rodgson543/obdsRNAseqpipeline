@@ -14,6 +14,11 @@ library(tidyverse)
 library(biomaRt)
 ```
 
+Read in the data and metadata downloaded from the CGAT server
+counts containins the 
+Mouse CD4+ and CD8+ T cells extracted from GFP-Egr2 knockin
+(Egr2 Kin) and Egr2loxP/loxP hCD2-Cre Egr3-/- (Egr2/3 DKO) mice, 7
+days after infection with vaccinia virus. (3 reps per groups)
 ```{r}
 counts <- read_tsv("/Users/rhodgson/OBDStestdata/Week5/obds_countstable.tsv.gz")
 counts
@@ -98,7 +103,8 @@ jointtable2 <- jointtable %>%
 jointtable2
 range(jointtable2$CPM)
 ```
-Now calculate log2(CPM+0.25)
+Now calculate log2(CPM+0.25) 
+Adding the 0.25 will sort out the logging problem on 0 values - see range of expression. Just an arbitary number 
 
 ```{r}
 jointtable3 <- jointtable2 %>%
@@ -153,4 +159,77 @@ ggplot(Filtergenes, aes(x=logCPM, color = sample))+geom_density()
 #Biological exploration of the data
 Plot CD4 and CD8 expression for all samples - does it make sense?
 Colour by replicate and facet by genotype against cell type. Generate the same plot for Egr2 and Egr3 for all samples - does it make sense? Choose 8 biologically relevant genes and plot a heatmap using the pheatmap package
+
+
+Making a variable for CD4 and CD8 filtering for CD4/CD8
+```{r}
+CD4CD8 <- Filtergenes %>%
+  filter(mgi_symbol == "Cd4"| mgi_symbol=="Cd8a")
+
+View(CD4CD8)
+```
+
+Plot CD4 and CD8 expression by genotype and cell type. Coloured by replicate and then facet by genotype against cell type
+```{r}
+ggplot(CD4CD8, aes(x=mgi_symbol, y=logCPM, color =Replicate))+
+  geom_jitter(width = 0.2)+
+  facet_grid(Genotype ~ Celltype)+
+  theme(axis.text.x = element_text(size=12, angle=45, hjust=1))
+
+```
+Generate the same plot for Egr2 and Egr3 for all samples - does it make sense?
+This is supposed to knock it out in all T cells (not sure if this really works... lol). Jitter stops the points all being on top of each other 
+
+```{r}
+Filtergenes %>%
+  filter(mgi_symbol == "Egr2"| mgi_symbol=="Egr3") %>% ggplot(aes(x=mgi_symbol, y=logCPM, color =Replicate))+
+  geom_jitter(width = 0.2)+
+  facet_grid(Genotype ~ Celltype)+
+  theme(axis.text.x = element_text(size=12, angle=45, hjust=1))
+
+```
+Choose 8 biologically relevant genes and plot a heatmap using the pheatmap package.
+Going to try and sort by variance so we can take the top genes
+Going to spread first
+groupby and summarise
+
+Load packages for later
+```{r}
+library(pheatmap)
+library(RColorBrewer)
+```
+
+Take data - calculate by gene so want to group by gene, summarise the variance and then take top 8 of variance. var() will calculate this for you
+the function pull extracts and gives you a acharacter vector that we'll use in later step
+```{r}
+
+matrix <- Filtergenes %>% group_by(mgi_symbol) %>% summarise(variance = var(logCPM)) %>% top_n(8, variance) %>% pull(mgi_symbol)
+
+head(matrix)
+```
+Now filter using character matrix
+```{r}
+top8filter <- Filtergenes %>% filter(mgi_symbol %in% matrix)
+
+head(top8filter)
+```
+Use this code, to make a nice matrix as input into a heatmap
+
+Here we filter on mgi_symbol genes from character vector matrix that contains the 8 genes that have the most variance. 
+Then select columns mgisymbol, sample, logCPM, 
+then use pivot wider to spread by giving samples as names and the values from logCPM to put it into a nice matrix format. 
+Use column_to_rownames to set the name of mgi_symbol as the rownames as heatmaps wont take NA values (mgi_symbol values basically)
+```{r}
+heatmapmatrix <- Filtergenes %>% filter(mgi_symbol %in% matrix) %>% select(mgi_symbol, sample, logCPM) %>% pivot_wider(names_from= sample, values_from = logCPM) %>% column_to_rownames("mgi_symbol")
+
+heatmapmatrix <- as.matrix(heatmapmatrix)
+View(heatmapmatrix)
+class(heatmapmatrix)
+```
+Use this as input for pheatmap - NICE
+```{r}
+
+pheatmap(heatmapmatrix)
+
+```
 
