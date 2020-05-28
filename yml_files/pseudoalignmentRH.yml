@@ -1,0 +1,7 @@
+kallisto:
+    index: /ifs/obds-training/apr20/rose/pipelines/pseudoalignment/Mus_musculus.GRCm38.cdna.all.fa.gz
+    threads: 12
+    options: --rf-stranded
+    
+
+
