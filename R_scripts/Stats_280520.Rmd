@@ -196,7 +196,11 @@ iris %>% filter(Species == "setosa" | Species == "virginica") %>% pull(Sepal.Len
 iris %>% filter(Species == "virginica"|Species == "setosa") %>% t.test(Sepal.Length ~ Species, data= . )
 
 ```
-#Multiple testing
+#Multiple testing using ALLL Microarray data set
+Expression set object - container for complex genomic experimnet - all the info - split out the expression variable into one object and metadata into another. Should allow you to subset easier (not sure if it does)
+
+I
+
 Use the ALL microarray gene expression dataset in the ALL package. The normalized expression data is stored in exprs(ALL) . Sample metadata is stored in pData(ALL)
 ```{r}
 BiocManager::install("ALL")
@@ -314,11 +318,53 @@ maps probes of microarray to gene identifiers
 ```{r}
 #BiocManager::install("hgu95av2.db")
 library(hgu95av2.db)
-AnnotationDbi::select(hgu95av2.db, top_probeset=1636_g_at , columns = "SYMBOL")
+```
+Now find out what that gene is called
+Bonus point: Does the most signi cant probeset map to a gene? If so, which one?
+```{r}
+AnnotationDbi::select(hgu95av2.db, "1636_g_at", columns = "SYMBOL")
 
 ```
 
 
-Bonus point: Does the most signi cant probeset map to a gene? If so, which one?
+
 Visualise the distribution of unadjusted p-values for the two probesets with high and low variance.
+Grab that particular probeset
+```{r}
+ABLprobe <- data.frame(gene =exprs(ALL_bcrneg)["1636_g_at",], mol_status1 = ALL_bcrneg$mol.biol)
+View(ABLprobe)
+```
+
+Do the groups have different expression of this gene?
+ggplot
+```{r}
+ggplot(ABLprobe, aes(x=mol_status1, y=gene))+geom_boxplot(col="red")+
+  geom_jitter()
+
+```
 How would you use variance be used to reduce the burden of multiple testing correction
+Calculte variance for each row of a dataframe
+```{r}
+library(matrixStats)
+```
+
+Calculates vairance of each row
+Which rowvars are less than the median variance 
+
+I dont particular understand ths
+Its a way of looking at variance of the individual probes of a dataset to only pick the ones that have higher variance 
+
+```{r}
+rowvars <- rowVars(exprs(ALL_bcrneg)[names(pvalues_combined),]) #gives row variance in correct order
+med <- median(rowvars)
+row_vars_low <- pvalues_combined[rowvars<med]
+hist(row_vars_low, breaks =100)
+
+
+```
+
+```{r}
+row_vars_high_p <- pvalues_combined[rowvars>med]
+hist(row_vars_high_p, 100)
+```
+
