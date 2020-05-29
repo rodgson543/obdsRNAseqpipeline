@@ -63,7 +63,7 @@ dim(PCA$x)
 ```
 Scree/Elbow plots to choose number of PCS
 ```{r}
-#library(factoextra)
+library(factoextra)
 fviz_eig(PCA, ncp=40)
 ```
 
@@ -253,24 +253,35 @@ How would you cluster the data? How many clusters would you choose?
 
 ```{r}
 #install.packages("dbscan")
-#library("dbscan")
+library("dbscan")
 ```
 
 Perplexity is like resolution really - all depends on what you want out, resoolution of the clusters etc
 So what do we want to feed into dbscan scan?
 Increase eps to increase clusters - relax how close points hae to be 
 ```{r}
-dbscan <-dbscan(prcomp_out$x[,1:25], eps = 15, minPts =3)
+dbscan2 <-dbscan(prcomp_out$x[,1:25], eps = 15, minPts =3)
 #, scale = FALSE) 
        #method = c("hybrid", "raw", "dist"))
-dbscan
-dbs <- as.data.frame(dbscan$cluster)
+dbscan2
+dbs <- as.data.frame(dbscan2$cluster)
 plot(dbs)
 ```
 Look at distance KNN plot
  distance to 10 nearest neighbour for each 
  
+ KNN distance will give you input for dbscan function 
+ value on y axis so each point has x neighbours
  
+ 
+ The idea is to calculate, the average of the distances of every point to its k nearest neighbors. The value of k will be specified by the user and corresponds to MinPts.
+
+Next, these k-distances are plotted in an ascending order. The aim is to determine the “knee”, which corresponds to the optimal eps parameter.
+
+A knee corresponds to a threshold where a sharp change occurs along the k-distance curve.
+
+
+dbscan tries to figure out how to turn into cluster
 ```{r}
 kNNdistplot(x = prcomp_out$x[, 1:25])
 #ggplot(tsne_data, aes(x=V1, y=V2, col=celltype))+
@@ -278,10 +289,60 @@ kNNdistplot(x = prcomp_out$x[, 1:25])
 ```
 
 ```{r}
+#library(umap)
 library(umap)
-umap <- umap(prcomp_out$x) 
-umap$knn
+library(dbscan)
 
+umap_out <- umap(prcomp_out$x[, 1:25])
+
+
+library(dbscan)
+kNNdistplot(x = umap_out$layout, k = 10)
+
+dbscan_out <- dbscan(x = umap_out$layout, eps = 0.5, minPts = 5)
+dbscan_out
+
+umap_plot_table <- bind_cols(
+  umap_out$layout %>% as_data_frame() %>% as_tibble(),
+  dbscan_cluster = as.factor(dbscan_out$cluster)
+)
+
+ggplot(umap_plot_table, aes(V1, V2, color = dbscan_cluster)) +
+  geom_point()
+```
+Plot clusters as theyved made it here
+
+```{r}
+umap_plot_table <- bind_cols(
+  umap_out$layout %>% as_data_frame()
+  %>% as_tibble(), dbscan_cluster =as.factor(dbscan_out$cluster))
+
+ggplot(umap_plot_table, aes(V1, V2, color=dbscan_cluster))+
+  geom_point()
+
+
+```
+
+
+
+
+
+
+Piyush's code 
+```{r}
+library("factoextra")
+library("fpc")
+#library("fviz_cluster")
+set.seed(123)
+
+ 
+
+data("multishapes", package = "factoextra")
+df <- prcomp_out$x[,1:25]
+db <- fpc::dbscan(prcomp_out$x[,1:25], eps = 15, MinPts = 5)
+plot(db, df, main = "DBSCAN", frame = FALSE)
+
+fviz_cluter(db, df, stand=FALSE, frame =FALSE, geom= "point")
 ```
 
 
