@@ -116,6 +116,8 @@ head(logcounts_subset)
 ```
 #PCA on top 1000 variable genes
 weight of each gene on PC 
+
+rotation #gives weight of each gene on PC
 ```{r}
 prcomp_out <- prcomp(x=t(logcounts_subset))
 str(prcomp_out)
@@ -142,7 +144,7 @@ plot_data <- bind_cols(
 )
 ```
 
-Plot this by PC1 and PC2
+Plot this by PC1 and PC2, colouring by the cell type metadata
 
 ```{r}
 gg_pca <- plot_data %>% ggplot()+
@@ -184,3 +186,44 @@ ggplot(head(scree_table, 50), aes(PC, var_cumsum))+
   theme_cowplot()+
   theme(axis.text.x = element_text(size = rel(0.5)))
 ```
+
+#Identify top genes for a given PC
+Remember that $rotation from the PCA output gives you weight of each gene on the PC. 
+Help you identify which genes drive PC - higher weight, higher influence on the PC 
+Matrix >> melt it 
+
+so we can identify top 10 genes with top weight on PC1
+Look at negative too as these will influence just as much - bit below this 
+```{r}
+prcomp_out$rotation[, "PC1"] %>%
+  sort(decreasing = TRUE) %>% tail(10)
+```
+
+```{r}
+prcomp_out$rotation %>% 
+  melt(varnames = c("gene", "PC"), value.name = "loading") %>%
+  as_tibble() %>%
+  filter(PC == "PC1") %>%
+  mutate(loading_abs = abs(loading)) %>%
+  top_n(n=20, wt=loading_abs) %>%
+  arrange(desc(loading_abs))
+```
+#Run tSNE
+Handle duplicates
+
+```{r}
+tsne_out <- Rtsne(prcomp_out$x[, 1:25], check_duplicates = FALSE)
+```
+
+Visualise tSNE
+```{r}
+tsne_data <- tsne_out$Y
+```
+
+Plot tsne
+```{r}
+rownames(tsne_data)
+plot(tsne_data)
+```
+
+
