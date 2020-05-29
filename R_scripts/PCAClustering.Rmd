@@ -1,0 +1,186 @@
+---
+title: "PCA_clustering290520.Rmd"
+author: "rhodgson"
+date: "29/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1. Perform PCA. How many principal components do you think you should keep for follow up analysis?
+2. Use the experimental metadata to visualise which cell types cluster together.
+3. Investigate which cell types (if any) the  rst few principal components are separating.
+4. Find the top genes associated with PC1 and PC2. Visualise gene expression values by cell type.
+5. Compare PCA to tSNE to UMAP.
+6. How would you cluster the data? How many clusters would you choose?
+7. Compare known cell type and cluster labels.
+
+```{r}
+#BiocManager::install("ExperimentHub")
+```
+
+```{r}
+#BiocManager::install("SingleR")
+```
+
+ExperimentHub is a repository of publicably available datasets - only datasets available that have all the metadata available to allow testing of new methods. IE toy datasets
+```{r}
+library(ExperimentHub)
+ehub <- ExperimentHub()
+logcounts <- readRDS("/Users/rhodgson/OBDStestdata/Week5/eHUB/logcounts.rds")
+col_data <- readRDS("/Users/rhodgson/OBDStestdata/Week5/eHUB/col_data.rds")
+```
+Did not use
+```{r}
+#logcounts <- ehub[["EH3094"]] # logcounts
+#col_data <- ehub[["EH3095"]] # colData
+```
+
+#Perform PCA
+Do on the logcounts file - center is true and scale is true
+Perform PCA. How many principal components do you think you should keep for follow up analysis?
+
+x contains the PCA matrix
+PCs are columns and genes are the names
+
+Genes as features as we want the genes to be column names and samples as rownmaes
+Now for each sample, coordinate for PCs.
+Reduced dimension for however many PCs to dimensions 
+
+```{r}
+PCA <- prcomp(t(logcounts), center=TRUE, scale = TRUE)
+str(PCA)
+
+PCA$x
+dim(PCA$x)
+```
+#Screeplot to figure out how many PCs to use
+
+```{r}
+#BiocManager::install("factoextra")
+```
+Scree/Elbow plots to choose number of PCS
+```{r}
+#library(factoextra)
+fviz_eig(PCA, ncp=40)
+```
+
+get eigen value will give you variance in variance.percent
+cumulate variance percent 
+```{r}
+Eigen <- as.data.frame(get_eigenvalue(PCA)) %>% mutate(PC=row_number())
+colnames(Eigen)
+ggplot(Eigen, aes(x=PC,y=cumulative.variance.percent))+geom_col(count=20)+geom_hline(yintercept = 95)
+```
+
+Manual way
+screeplot gives absolute variance as default
+```{r}
+screeplot(PCA, npcs = min(50, length(PCA$sdev)),
+          type = c("barplot", "lines"))
+```
+
+Adding in rest of library
+```{r}
+library(matrixStats)
+library(tidyverse)
+library(cowplot)
+library(reshape2)
+library(Rtsne)
+```
+
+#Kevin's way
+
+Checking that the samples in logcoutns are present in metadata
+```{r}
+table(colnames(logcounts) %in% rownames(col_data))
+```
+Find most variable genes - variance of each row
+```{r}
+var_genes <- rowVars(logcounts)
+var_genes
+
+```
+Find top most varied gene by ordering by vargenes (variance)
+subset on keep_genes (top 1000)
+```{r}
+df_order <- tibble(variance=var_genes,
+                   order(var_genes, decreasing = TRUE))
+#take head(1000) values
+keep_genes <- head(order(var_genes, decreasing = TRUE), 1000)
+logcounts_subset<- logcounts[keep_genes, ]
+dim(logcounts_subset)
+head(logcounts_subset)
+```
+#PCA on top 1000 variable genes
+weight of each gene on PC 
+```{r}
+prcomp_out <- prcomp(x=t(logcounts_subset))
+str(prcomp_out)
+
+View(prcomp_out$rotation)
+View(prcomp_out$sdev) #gives stdev - vairance
+rowSums((prcomp_out$rotation))
+```
+
+
+Visualise PC coloured by cell type
+Pasting together with bind_cols()
+Keeping track of sample name, main label (annotation of sample),
+
+label.main gives cell type annotation (based on metadata)
+tidyverse to reshape matrix. tissue annonation and PC1 and PC2
+
+
+```{r}
+plot_data <- bind_cols(
+  sample = rownames(prcomp_out$x),
+  label.main = col_data$label.main,
+  prcomp_out$x %>% as_tibble() %>% dplyr::select(PC1, PC2)
+)
+```
+
+Plot this by PC1 and PC2
+
+```{r}
+gg_pca <- plot_data %>% ggplot()+
+  geom_point(aes(PC1, PC2, color=label.main))+
+  theme_cowplot()
+gg_pca
+```
+#Scree plot
+capture standard deviation 
+seqalong - captures info of PC for each PC throughout (gives a label for each PC- 1- however)
+percentage of variance of each PC
+cumsum gives you culmative variance - how much of variance is explained by 1, 2, 3 4 5 etc PCs
+```{r}
+scree_table <- tibble( sdev=prcomp_out$sdev,
+                       PC=seq_along(prcomp_out$sdev),
+                       percent_var=sdev^2/sum(sdev^2),
+                       var_cumsum=cumsum(percent_var)
+                       )
+head(scree_table)
+```
+ggplotting a scree plot by PC number (defined above) with percent variance (also defined above)
+```{r}
+ggplot(head(scree_table, 50), aes(PC, percent_var))+
+  geom_col(fill="grey")+
+  geom_point()+
+  scale_x_continuous(breaks=seq_along(scree_table$PC))+
+  labs(y="%Variance explained", title = "Percentage of Variance explained ")+
+  theme_cowplot()+
+  theme(axis.text.x = element_text(size = rel(0.5)))
+```
+Plot cumsum 
+```{r}
+ggplot(head(scree_table, 50), aes(PC, var_cumsum))+
+  geom_line()+
+  geom_point()+
+  geom_hline(yintercept = 0.9)+
+  scale_x_continuous(breaks=seq_along(scree_table$PC))+
+  labs(y="Cumulative %Variance explained", title = "Cumulative Percentage of Variance explained ")+
+  theme_cowplot()+
+  theme(axis.text.x = element_text(size = rel(0.5)))
+```
