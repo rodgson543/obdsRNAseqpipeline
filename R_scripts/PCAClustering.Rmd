@@ -211,22 +211,86 @@ prcomp_out$rotation %>%
 #Run tSNE
 26 PCs handle most of the data variance
 some samples are exact duplicates of each other, so tell to ignore duplicates
-Running tSNE on output of matrix
+Running tSNE on output of matrix - first 1:25 columns
+Seed could be any number so you initialise randomness, setting seed sets the randomness so you can same out
 
 ```{r}
-tsne_out <- Rtsne(prcomp_out$x[, 1:25], check_duplicates = FALSE)
+set.seed(1)
+tsne_out <- Rtsne(prcomp_out$x[, 1:25], 
+                  check_duplicates = FALSE)
 ```
 
 Visualise tSNE
 ```{r}
-tsne_data <- tsne_out$Y
-```
-
-Plot tsne
-```{r}
-rownames(tsne_data)
+tsne_data <- as.data.frame(tsne_out$Y) 
+#rownames(tsne_data)
 plot(tsne_data) 
      #col=label.main)
 ```
 
+ggplot
+labels are from col_data$label.main
+```{r}
+
+#colnames(tsne_data) <- c("tSNE_1", "tSNE2")
+colnames(tsne_data)
+tsne_data$celltype <- col_data$label.main
+ggplot(tsne_data, aes(x=V1, y=V2, col=celltype))+
+  geom_point()
+```
+
+#Try UMAP for homework
+
+#Now to cluster:
+How would you cluster the data? How many clusters would you choose?
+7. Compare known cell type and cluster labels.
+
+```{r}
+#if(!require(devtools)) install.packages("devtools")
+#devtools::install_github("kassambara/factoextra")
+#library(factoextra)
+```
+
+```{r}
+#install.packages("dbscan")
+#library("dbscan")
+```
+
+Perplexity is like resolution really - all depends on what you want out, resoolution of the clusters etc
+So what do we want to feed into dbscan scan?
+Increase eps to increase clusters - relax how close points hae to be 
+```{r}
+dbscan <-dbscan(prcomp_out$x[,1:25], eps = 15, minPts =3)
+#, scale = FALSE) 
+       #method = c("hybrid", "raw", "dist"))
+dbscan
+dbs <- as.data.frame(dbscan$cluster)
+plot(dbs)
+```
+Look at distance KNN plot
+ distance to 10 nearest neighbour for each 
+ 
+ 
+```{r}
+kNNdistplot(x = prcomp_out$x[, 1:25])
+#ggplot(tsne_data, aes(x=V1, y=V2, col=celltype))+
+  #geom_point()
+```
+
+```{r}
+library(umap)
+umap <- umap(prcomp_out$x) 
+umap$knn
+
+```
+
+
+
+
+```{r}
+BiocManager::install("hdbscan")
+library("hdbscan")
+hdbscan <- HDBSCAN(min_samples=10, min_cluster_size=500)
+y_predicted = hdbscan_instance.fit_predict(umap_transformed)
+```
 
