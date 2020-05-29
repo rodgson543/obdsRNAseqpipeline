@@ -209,7 +209,9 @@ prcomp_out$rotation %>%
   arrange(desc(loading_abs))
 ```
 #Run tSNE
-Handle duplicates
+26 PCs handle most of the data variance
+some samples are exact duplicates of each other, so tell to ignore duplicates
+Running tSNE on output of matrix
 
 ```{r}
 tsne_out <- Rtsne(prcomp_out$x[, 1:25], check_duplicates = FALSE)
@@ -223,7 +225,8 @@ tsne_data <- tsne_out$Y
 Plot tsne
 ```{r}
 rownames(tsne_data)
-plot(tsne_data)
+plot(tsne_data) 
+     #col=label.main)
 ```
 
 
