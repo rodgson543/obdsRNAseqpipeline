@@ -1,0 +1,461 @@
+---
+title: "DEseq2"
+author: "rhodgson"
+date: "01/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("DESeq2")
+BiocManager::install("EnsDb.Mmusculus.v79")
+BiocManager::install("vsn")
+```
+RNA-seq (European Nucleotide Archive PRJEB18572)
+• Mouse CD4+ and CD8+ T cells extracted from GFP-Egr2 knockin (Egr2
+Kin) and Egr2loxP/loxP hCD2-Cre Egr3-/- (Egr2/3 DKO) mice, 7 days after
+infection with vaccinia virus
+• 3 biological replicates per group (12 samples total)
+• Two files (/ifs/obds-training/apr20/exercises/rnaseq/):
+Ø obds_countstable.tsv.gz
+Ø obds_sampletable.tsv
+```{r}
+library(DESeq2)
+library(tidyverse)
+library(ggplot2)
+library(EnsDb.Mmusculus.v79)
+library(dplyr)
+library(pheatmap)
+library(RColorBrewer)
+```
+
+Load data 
+Convert the counts table (obds_countstable.tsv.gz) and the sample
+information table (obds_sampletable.tsv) into a suitable format for
+generating a DESeqDataSet object
+Ø Set Egr2/3 DKO CD8 cells as the reference level
+
+
+```{r}
+counts <- read_tsv("/Users/rhodgson/OBDStestdata/Week5/obds_countstable.tsv.gz")
+counts
+metadata <- read_tsv("/Users/rhodgson/OBDStestdata/Week5/obds_sampletable.tsv")
+View(counts)
+```
+
+Sort data into tidy frmat so comparator conditons clear
+in the counts table you want genes as rows, in metadata you want samples as rownames
+```{r}
+obds_sample <- metadata %>% 
+  separate(sample_title, c("Gene", "Genotype", "Celltype", "Replicate"), sep="_")
+obds_sample2 <- obds_sample %>% 
+  unite(Condition, c("Gene", "Genotype", "Celltype"), sep= "_")
+View(obds_sample2)
+```
+Reformat dataframe: samples as rownames
+column names and rownmaes
+Dont want the Geneid 
+rownames to columns
+
+```{r}
+class(counts)
+count_table <- column_to_rownames(counts,var="Geneid")
+count_table <- as.matrix(count_table)
+```
+Set the sample accession to row names of the metadata column
+```{r}
+class(obds_sample2)
+row.names(obds_sample2) <- obds_sample2$Sample_accession
+```
+
+Order factors so the reference is the lowest - factors can be strings
+Access column from metadata. Relevel first
+
+From Deseq2 manual:
+By default, R will choose a reference level for factors based on alphabetical order. Then, if you never tell the DESeq2 functions which level you want to compare against (e.g. which level represents the control group), the comparisons will be based on the alphabetical order of the levels. There are two solutions: you can either explicitly tell results which comparison to make using the contrast argument (this will be shown later), or you can explicitly set the factors levels.  
+
+
+```{r}
+obds_sample2$Condition <- as.factor(obds_sample2$Condition)
+obds_sample2$Condition <- relevel(obds_sample2$Condition, ref="Egr2/3_DKO_CD8")
+levels(obds_sample2$Condition)
+```
+Now generate the DESeq object
+
+count data in counts (count_table)
+How to set the batch/condition - don't have a condition
+
+Generate a DESeqDataSet object named dds
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = count_table,
+                              colData = obds_sample2, 
+                              design= ~ Condition)
+```
+Access the design formula, counts matrix and sample information
+from dds
+Known batch variables should be included in the design formula
+• Alternatively, can generate surrogate variables directly from highdimensional data that capture unknown sources of variation:
+
+
+How to access each layer? using @ and assays()
+```{r}
+dds@design
+dds@colData
+assay(dds)
+assays(dds)$counts
+```
+
+Calculate the size factors for each sample – estimateSizeFactors()
+Ø Access the size factors from the dds object
+Ø Generate a bar plot of the size factors
+
+Ratios - standard median ratio- calculated between sample count and average count for each gene. Size factor for sample = median of ratios for all genes
+
+Assign funcions to same object
+```{r}
+dds <- estimateSizeFactors(dds)
+sizeFactors(dds)
+```
+
+Make the bar plot of the size factors
+
+```{r}
+plotable <- as.data.frame(dds$sizeFactor)
+ggplot(plotable, aes(dds$sizeFactor))+geom_histogram()
+```
+Plot as a bar instead
+```{r}
+#plotable <- as.data.frame(dds$sizeFactor)
+ggplot(plotable, aes(dds$sizeFactor))+geom_bar(col="red")
+  
+```
+#Sort this out after
+```{r}
+barplotSF <- as.data.frame(dds$sizeFactor)
+barplotSF <- rownames_to_column(barplotSF, var="s")
+```
+
+
+#Obtain dispersion estimates for each gene – estimateDispersions()
+Ø Plot the per-gene dispersion estimates (DESeq2 has a helper function for this)
+
+Higher the mean, lower the dispersion
+From manual:
+Plotting the dispersion estimates is a useful diagnostic. The dispersion plot below is typical, with the final estimates shrunk from the gene-wise estimates towards the fitted estimates. Some gene-wise estimates are flagged as outliers and not shrunk towards the fitted value, (this outlier detection is described in the manual page for estimateDispersionsMAP). The amount of shrinkage can be more or less than seen here, depending on the sample size, the number of coefficients, the row mean and the variability of the gene-wise estimates.
+
+```{r}
+dds <- estimateDispersions(dds)
+plotDispEsts(dds, CV=FALSE,
+             genecol="black", fitcol="red", finalcol="dodgerblue", legend="TRUE", log="xy", cex=0.45)
+```
+#Perform the Wald test – nbinomWaldTest()
+Model expression of each gene as a linear combination of
+explanatory factors (generalised linear model)
+```{r}
+dds <- nbinomWaldTest(dds)
+
+```
+
+Access the values that DESeq() has calculated for each gene
+Access all calculated values:
+Intercept value: model for that gene - base expression for that gene for that condition
+All the info stored in this varaible now - could use the data from here to generate your own plot
+condtion effect for each set of comparisons
+wald stat - 
+dispOutlier - very high dispersion that dont get pulled dwn to the line
+```{r}
+mcolsdata <-as.data.frame(mcols(dds))
+View(mcolsdata)
+
+```
+
+Use the DESeq() function to perform steps 4-6 in one go
+```{r}
+dds <- DESeq(dds)
+```
+
+Identify differentially-expressed genes between CD8+ and CD4+ T cells from Egr2/3 DKO mice
+
+compares the second one to the reference (that we set with relevelling)
+```{r}
+res<- results(dds)
+res
+resultsNames(dds) #shows you the conditions
+```
+How do we compare others
+character vector with 3 elements: name of factor in design formula (Condition), numerator for fold change and demonomiator
+```{r}
+colData(dds)$Condition
+results(dds, contrast=c("Condition","Egr2_Kin_CD8", "Egr2/3_DKO_CD8")) 
+```
+```{r}
+colData(dds)$Condition
+contrast <- results(dds, contrast=c("Condition", "Egr2/3_DKO_CD4", "Egr2/3_DKO_CD8"))
+class(contrast)
+contrast <- as.data.frame(contrast)
+```
+
+Plot a histogram of the p-values – does it look as expected?
+```{r}
+
+ggplot(contrast, aes(x=padj)) + geom_histogram(bins = 40)
+```
+Sort by p value
+```{r}
+res2 <- res[order(res$padj), ]
+head(res2)
+
+```
+
+
+
+#Generate an MA plot of the logFC values for all genes
+MAplot changes attributable to a given variable over the mean of normalized counts for all the samples in the DESeqDataSet. Points will be colored red if the adjusted p value is less than 0.1. Points which fall out of the window are plotted as open triangles pointing either up or down.
+
+Each dot is the mean of the normalised count for that gene and then the change between conditions
+
+```{r}
+normal <- plotMA(res, ylim=c(-3,3))
+```
+12. Shrink the logFC values using the normal, apeglm and ashr methods
+
+Shrinkage of effect size (LFC estimates) is useful for visualization and ranking of genes. To shrink the LFC, we pass the dds object to the function lfcShrink
+
+```{r}
+BiocManager::install("apeglm")
+BiocManager::install("ashr")
+```
+
+
+```{r}
+res_nor <- lfcShrink(dds, coef = "Condition_Egr2.3_DKO_CD4_vs_Egr2.3_DKO_CD8", type = "normal")
+res_apeglm <- lfcShrink(dds, coef = "Condition_Egr2.3_DKO_CD4_vs_Egr2.3_DKO_CD8", type = "apeglm")
+res_ashr <- lfcShrink(dds, coef = "Condition_Egr2.3_DKO_CD4_vs_Egr2.3_DKO_CD8", type = "ashr")
+```
+
+```{r}
+library(cowplot)
+```
+
+
+```{r}
+apeglym <- plotMA(res_apeglm, ylim=c(-3,3))
+ashr<- plotMA(res_ashr, ylim=c(-3,3))
+```
+Plot them all together
+these show you the log fold change 
+it just gives you general idea of how many up and downregulated genes you have
+```{r}
+par(mfrow= c(1,3))
+plotMA(res, ylim=c(-3,6))
+plotMA(res_apeglm, ylim=c(-3,6))
+plotMA(res_ashr, ylim=c(-3,6))
+par(mfrow= c(1,1))
+```
+
+13. Generate MA plots of the shrunken logFC values – compare methods
+
+#14. Generate a results table (one shrinkage method) containing mgi symbols
+Ø Use the EnsDb.Mmusculus.v79 package - installed
+Ø Remove all genes with a padj of NA
+Ø How many Ensembl IDs are not assigned an mgi symbol and how many mgi symbols are duplicated?
+
+
+```{r}
+res_apeglm_df <- as.data.frame(res_apeglm)
+#View(res_apeglm_df)
+res_apeglm_df <- rownames_to_column(res_apeglm_df, var="Ensemble_id")
+View(res_apeglm_df)
+#Here we wwant to filter out all the things that have NAs
+res_apeglm_df %>% 
+  dplyr::filter(!is.na(padj)) %>% View()
+```
+
+Next bit: we want to use the ensdb package to convert ensembl to Geneid names 
+Looks like Genename/gene id is what we wany
+```{r}
+edb <- EnsDb.Mmusculus.v79
+keytypes(edb)
+```
+In the database look for 
+keys gives the the list of ensembl ids from our object, column is what we want, ketype matches the key
+
+```{r}
+mgi_symbol <- mapIds(edb, keys = res_apeglm_df$Ensemble_id, column = "GENENAME", keytype = "GENEID")
+head(mgi_symbol)
+```
+
+Making sure it matches in correct order according to the ensemble id - incorporate as new column making sure that the order matches 
+```{r}
+res_apeglm_df$mgi_symbol <- mgi_symbol[res_apeglm_df$Ensemble_id]
+View(res_apeglm_df)
+
+#Filter and check how many Ensembl IDs are not assigned an mgi symbol using dim()
+
+res_apeglm_df %>% 
+  dplyr::filter(!is.na(padj)) %>% dim() 
+```
+How many Ensembl IDs are not assigned an mgi symbol and how many mgi symbols are duplicated?
+
+```{r}
+res_apeglm_df %>% 
+  dplyr::filter(is.na(mgi_symbol)) %>% dim() 
+```
+```{r}
+#res_apeglm_filer <-res_apeglm_df %>% 
+ # dplyr::filter(!is.na(mgi_symbol))
+#dim(res_apeglm_filer)
+```
+```{r}
+res_apeglm_filter <-res_apeglm_df %>% 
+  dplyr::filter(!is.na(padj))  
+dim(res_apeglm_filter)
+```
+remove duplicates
+```{r}
+duplicated <- table(duplicated(res_apeglm_df$mgi_symbol))
+head(duplicated)
+```
+
+#Write the results table to a CSV file
+```{r}
+#write_csv(res_apeglm_filter, file="/")
+
+```
+Filter the results table for padj < 0.05, and write to a CSV file
+```{r}
+filterby_p <- res_apeglm_filter %>% dplyr::filter(padj<0.05)
+View(filterby_p)
+```
+
+```{r}
+write.csv(filterby_p, row.names = FALSE, file= "/Users/rhodgson/OBDStestdata/Week5/filterbyp.csv")
+dim(filterby_p)
+```
+
+#Generate VST and rlog transformed counts:
+Transformation methods implemented in DESeq2:
+Ø VST (variance stabilising transformation)
+Ø rlog (regularised logarithm transformation)
+• Remove the dependence of the variance on the mean
+• Produce transformed data on log2 scale, normalised with respect to library size
+
+Most cases we want blind = True
+When blind equals TRUE (the default), the functions will re-estimate the dispersions using only an intercept. This setting should be used in order to compare samples in a manner wholly unbiased by the information about experimental groups, for example to perform sample QA (quality assurance) as demonstrated below.
+
+We want true as we dont want the algorithm to know what the conditions are - only set it up to run as FALSE if one condition has a huge dispersion that will change the results 
+```{r}
+vsd <- vst(dds, blind=TRUE)
+
+rld <- rlog(dds, blind=TRUE)
+vsd
+```
+
+
+Ø Plot the relationship between the mean expression and the sd of all genes
+– fit a trend line
+
+```{r}
+ntd <- normTransform(dds)
+library("vsn")
+meanSdPlot(assay(ntd))
+```
+
+
+Dont want to look at the ranks
+Doing the VST transfoomation to remove the dependency of the varition from the level of expression - otherwise high count genes will drive PCA
+
+Checking whether SD of alll genes is similar across all genes - more highly expressed genes do indeed have more variance and thats what we want to transform out 
+
+The points that look like outliers - appears that the variance is high - these may be the genes that drive the PCA 
+
+```{r}
+meanSdPlot(assay(vsd), ranks=FALSE)
+meanSdPlot(assay(rld), ranks=FALSE)
+```
+remove the relationship between mean and variance.  And DESeq does a similar thing inside but doesn't give us back transformed counts so we need to get these separately
+
+
+#Using both sets of transformed counts:
+Ø Generate a PCA plot
+Ø Generate a heatmap of the top 20 (by FC) differentially-expressed genes –
+label samples by condition and genes by mgi symbol
+Ø Generate a heatmap of sample-sample distances
+
+Sumeet is currently looking at how changing the blinding from True/False affects the transformed counts - lower if blind is false - makes sense - When blind is true, dont account for the dispersion due to the condition rather than biological variation 
+
+#Generate a PCA plot
+Plot PCA
+```{r}
+plotPCA(vsd, intgroup="Condition")
+plotPCA(vsd)
+colData(dds)
+```
+Generate a heatmap of the top 20 (by FC) differentially-expressed genes – label samples by condition and genes by mgi symbol
+
+#This isnt really right
+```{r}
+select <- order(rowMeans(counts(dds,normalized=TRUE)),
+                decreasing=TRUE)[1:20]
+df <- as.data.frame(colData(dds)["Condition"])
+pheatmap(assay(ntd)[select,], cluster_rows=FALSE, show_rownames=FALSE,
+         cluster_cols=FALSE, annotation_col=df)
+```
+
+#Label samples b
+Using the deseq results to pick our top 20 genes 
+res_apeglm_filter is the vector we want to use
+```{r}
+library(tidyverse)
+```
+Convert to absolute values so you can get both pos n neg fold changhe - muate added this as column to dataframe, thn arrage high to low abd then extract using pull() and take top 20
+
+```{r}
+#View(res_apeglm_filter)
+top20genes <- res_apeglm_filter %>% dplyr::mutate(abs_foldchange = abs(log2FoldChange)) %>% dplyr:: arrange(desc(abs_foldchange)) %>% head(n=20) %>%  dplyr::pull(Ensemble_id) 
+top20genes
+
+#top20 <- sort(abs(res_apeglm_filter$log2FoldChange), decreasing = TRUE)
+#top20which <- which(top20 %in% res_apeglm_filter)
+#top20which
+```
+Subset transformed counts so we have a matrix of transformed counts for these 20 genes
+
+```{r}
+top20vsd <- which(rownames(assay(vsd)) %in% top20genes)
+top20vsd
+#Dharams code much better
+top20vsd <- assay(vsd[top20genes, ])
+head(top20vsd)
+```
+```{r}
+
+newnames <- mapIds(EnsDb.Mmusculus.v79, keys = row.names(top20vsd), column = "SYMBOL", keytype="GENEID")
+#prevent duplicates - adds .1 and .2 etc onto heatmap but becareful and only use for plotting
+newnames <- make.unique(newnames)
+
+#Assign to matrix row names
+rownames(top20vsd) <- newnames
+top20vsd
+```
+
+```{r}
+pheatmap(top20vsd, height =2000)
+```
+```{r}
+heatmap(top20vsd)
+```
+
+
+
+```{r}
+sampledists <- dist(t(assay(vsd)))
+```
+
+
