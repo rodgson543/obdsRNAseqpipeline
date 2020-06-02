@@ -1,0 +1,282 @@
+---
+title: "PathwayAnalysisworkshop.Rmd"
+author: "rhodgson"
+date: "02/06/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load packages/libraries
+```{r}
+#BiocManager::install("clusterProfiler")
+
+#BiocManager::install("DOSE")
+#BiocManager::install("enrichMAP")
+
+
+```
+
+Load libraries
+```{r}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(DESeq2)
+library(EnsDb.Mmusculus.v79)
+library(pheatmap)
+library(RColorBrewer)
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(DOSE)
+library(cowplot)
+library(enrichplot)
+```
+
+Load files - these are from the DESeq2 workshop on Monday 01/06/20. filter_p05 is filtered on log2FC over 1 and p value <0.05 
+allgenes is all genes comparing cd4 v cd8 DKO
+```{r}
+filter_p05 <- read.csv("/Users/rhodgson/OBDStestdata/Week5/filterbyp05.csv", stringsAsFactors = FALSE)
+filter_p01 <- read.csv("/Users/rhodgson/OBDStestdata/Week5/filterbyp01.csv", stringsAsFactors = FALSE)
+allgenes  <- read.csv("/Users/rhodgson/OBDStestdata/Week5/allgenes.csv", stringsAsFactors = FALSE)
+dim(filter_p01)
+dim(filter_p05)
+dim(allgenes)
+```
+First going to look into how to do overrepresentation analysis:
+https://yulab-smu.github.io/clusterProfiler-book/
+Use function:
+enrichGO - need to get ENtrezID
+
+Convert gene ids to entrezid for ech table
+As you read in all genes tables need to put in strings as factors
+```{r}
+edb <- EnsDb.Mmusculus.v79
+entrezid_allgenes <- mapIds(edb, keys = allgenes$Ensemble_id, column = "ENTREZID", keytype = "GENEID")
+allgenes$entrez_id <- entrezid_allgenes[allgenes$Ensemble_id]
+View(allgenes)
+```
+Do the same for the other 2 tables
+```{r}
+entrezid_05 <- mapIds(edb, keys = filter_p05$Ensemble_id, column = "ENTREZID", keytype = "GENEID")
+filter_p05$entrez_id <- entrezid_05[filter_p05$Ensemble_id]
+View(filter_p05)
+```
+
+```{r}
+entrezid_01 <- mapIds(edb, keys = filter_p01$Ensemble_id, column = "ENTREZID", keytype = "GENEID")
+filter_p01$entrez_id <- entrezid_01[filter_p01$Ensemble_id]
+View(filter_p01)
+```
+
+
+filter for na genes and pull for entrez id to just get column - can otherwise get table$column in enrichGO
+```{r}
+genelist_all <- allgenes %>% dplyr::filter(!is.na(entrez_id)) %>% pull(entrez_id)
+genelist_p05 <- filter_p05 %>% dplyr::filter(!is.na(entrez_id)) %>% pull(entrez_id)
+genelist_p01 <- filter_p01 %>% dplyr::filter(!is.na(entrez_id)) %>% pull(entrez_id)
+View(genelist_all)
+```
+
+Gene enrichment - "is this set of (DE) genes enriched for each (pathway) geneset, relative to the whole genome"
+Give genelist all as the background gene set - this will read as relative to the whole genome
+ketype is what we're using as a key
+readable = TRUE (sets them to the gene name rather than ens id etc)
+```{r}
+ego05 <- enrichGO(genelist_p05, OrgDb = org.Mm.eg.db, keyType = "ENTREZID", 
+         ont = "ALL",
+         universe=as.character(genelist_all),
+         pvalueCutoff = 0.05, 
+         readable = TRUE)
+dim(ego05)
+head(ego05, n=50)
+```
+Same for 0.01
+
+```{r}
+ego01 <- enrichGO(genelist_p01, OrgDb = org.Mm.eg.db, keyType = "ENTREZID", 
+         ont = "ALL",
+         universe=as.character(genelist_all),
+         pvalueCutoff = 0.01, 
+         readable = TRUE)
+dim(ego01)
+head(ego01, n=50)
+```
+
+Visualisation
+
+```{r}
+dotplot(ego05, showCategory=20,  font.size = 7)+ggtitle("dotplot for GO_BP")
+
+```
+
+```{r}
+#library(enrichplot)
+barplot(ego05, showCategory=20, font.size = 7)+ggtitle("Bar for GO_BP")
+```
+KEGG enrichment analysis - vectir of genes, function will return the enrichmen KEGG categories with FDR control
+```{r}
+kegg_05 <- enrichKEGG(gene=genelist_p05,
+                      organism='mmu',
+                      pvalueCutoff = 0.05)
+barplot(kegg_05, showCategory=20, font.size = 7)
+```
+
+
+```{r}
+kegg_01 <- enrichKEGG(gene=genelist_p01,
+                      organism='mmu',
+                      pvalueCutoff = 0.01)
+barplot(kegg_01, showCategory=20, font.size = 7)
+```
+
+```{r}
+p1 <- emapplot(ego05, font.size=6, layout= "nicely", showCategory = 15, line_scale=5)
+p1
+p2 <- emapplot(ego01, font.size=6, layout= "nicely", showCategory = 10)
+cowplot::plot_grid(p1, p2, ncol=2, labels=LETTERS[1:2])
+```
+
+```{r}
+upsetplot(ego01)
+```
+
+
+```{r}
+
+p3 <- barplot(kegg_05, showCategory=8, font.size = 4)+ ggtitle("KEGG0.05")
+p4 <- dotplot(kegg_01, showCategory=30, font.size = 4) + ggtitle("KEGG0.01")
+cowplot::plot_grid(p3, p4, ncol=2, labels=LETTERS[1:2])
+```
+
+Compare gene clusters functional profile:
+Given a list of gene set, this function will compute profiles of each gene cluster.
+gene_list_low005 gave me the genes most downregulated over -1 in previous script
+
+
+```{r}
+gene_list_low005 <- read.csv("/Users/rhodgson/OBDStestdata/Week5/gene_list_low005.csv", stringsAsFactors = FALSE)
+
+gene_list_low005 <- gene_list_low005 %>%  dplyr::pull(x) 
+class(gene_list_low005)
+View(gene_list_low005)
+```
+
+```{r}
+#Compare cluster bit:
+
+xx <- compareCluster(geneClusters = list(up=as.character(genelist_p05), down= as.character(gene_list_low005)), fun="enrichKEGG", "org.Mm.eg.db",organism="mmu", pvalueCutoff=0.05, universe=as.character(genelist_all))
+dotplot(xx, showCategory=5)
+
+```
+Do the same for 0.01
+
+```{r}
+gene_list_low001 <- read.csv("/Users/rhodgson/OBDStestdata/Week5/gene_list_low001.csv", stringsAsFactors = FALSE)
+
+gene_list_low001 <- gene_list_low001 %>%  dplyr::pull(x) 
+class(gene_list_low001)
+x2 <- compareCluster(geneClusters = list(up=as.character(genelist_p01), down= as.character(gene_list_low001)), fun="enrichKEGG", "org.Mm.eg.db",organism="mmu", pvalueCutoff=0.01, universe=as.character(genelist_all))
+dotplot(x2, showCategory=5)
+```
+Tells you pathways enriched in different clusters - would take top upregulated genes from clusters
+Would compare 
+
+```{r}
+x1 <- compareCluster(geneClusters = list(up=as.character(genelist_p05), down=as.character(gene_list_low005)),OrgDb="org.Mm.eg.db", fun="enrichGO", pvalueCutoff=0.05, universe = as.character(genelist_all))
+
+x1 <- dotplot(x1, showCategory=5)
+x1
+```
+
+
+Validation:
+```{r}
+cc <- compareCluster(genelist_p01, fun="enrichKEGG",
+                     organism="mmu", pvalueCutoff=0.01)
+#p1 <- emapplot(cc)
+#p2 <- emapplot(cc,legend_n=2) 
+##p3 <- emapplot(cc,pie="count")
+#p4 <- emapplot(cc,pie="count", pie_scale=1.5, layout="kk")
+#cowplot::plot_grid(p1, p2, p3, p4, ncol=2, labels=LETTERS[1:4])
+```
+
+
+#GO gene set enrichment
+
+```{r}
+#gse_05 <- gseGO(geneList=genelist_p05,
+              OrgDb        = org.Mm.eg.db,
+              ont          = "CC",
+              nPerm        = 1000,
+              minGSSize    = 100,
+              maxGSSize    = 500,
+              pvalueCutoff = 0.05,
+              verbose      = FALSE)
+```
+
+
+#KEGG Gene Set Enrichment Analysis
+input is gene list (3.1 of manua tells you what it is)
+gene list is numeric vector of fold cnages - table of all genes from analysis (ie. allgenes)
+Trying to sort out the inpt file here - making sure 
+```{r}
+length(allgenes$Ensemble_id)
+length(which(is.na(allgenes$entrez_id)))
+library(dplyr)
+allgenes_f <- allgenes %>% dplyr::filter(!is.na(entrez_id)) 
+head(allgenes_f)
+
+```
+```{r}
+#%>% pull(entrez_id)
+results_all_FC <- allgenes_f$log2FoldChange
+
+names(results_all_FC) <- allgenes_f$entrez_id
+head(results_all_FC)
+table(is.na(names(results_all_FC)))
+
+
+#sort by fold change
+results_all_FC <- sort(results_all_FC, decreasing = TRUE)
+head(results_all_FC)
+
+results_all_FCdup <- results_all_FC %>% dplyr::filter(!(duplicated(results_all_FC))) 
+
+```
+
+Check duplicate entrezids
+```{r}
+duplicated <-table(duplicated(results_all_FC))
+head(duplicated)
+
+
+```
+
+```{r}
+kk2 <- gseKEGG(geneList = results_all_FC,
+              organism = "mmu")
+head(kk2)
+
+#xx <- gseKEGG(geneList = all_scores, organism = "mmu")
+#as.data.frame(xx)
+```
+
+```{r}
+ego3 <- gseGO(geneList     = results_all_FC,
+              OrgDb        = org.Mm.eg.db,
+              ont          = "ALL",
+              nPerm        = 1000,
+              minGSSize    = 100,
+              maxGSSize    = 500,
+              pvalueCutoff = 0.05,
+              verbose      = FALSE)
+
+as.data.frame(ego3)
+
+p8 <- gseaplot(ego3)
+p8
+```
+

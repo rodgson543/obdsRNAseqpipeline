@@ -10,11 +10,11 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-if (!requireNamespace("BiocManager", quietly = TRUE))
+#if (!requireNamespace("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
-BiocManager::install("DESeq2")
-BiocManager::install("EnsDb.Mmusculus.v79")
-BiocManager::install("vsn")
+#BiocManager::install("DESeq2")
+#BiocManager::install("EnsDb.Mmusculus.v79")
+#BiocManager::install("vsn")
 ```
 RNA-seq (European Nucleotide Archive PRJEB18572)
 • Mouse CD4+ and CD8+ T cells extracted from GFP-Egr2 knockin (Egr2
@@ -228,10 +228,10 @@ normal <- plotMA(res, ylim=c(-3,3))
 Shrinkage of effect size (LFC estimates) is useful for visualization and ranking of genes. To shrink the LFC, we pass the dds object to the function lfcShrink
 
 ```{r}
-BiocManager::install("apeglm")
-BiocManager::install("ashr")
+#BiocManager::install("apeglm")
+#BiocManager::install("ashr")
 ```
-
+Looking at CD4 v CD8 for DKO and doing the shrinkage
 
 ```{r}
 res_nor <- lfcShrink(dds, coef = "Condition_Egr2.3_DKO_CD4_vs_Egr2.3_DKO_CD8", type = "normal")
@@ -337,6 +337,59 @@ View(filterby_p)
 ```{r}
 write.csv(filterby_p, row.names = FALSE, file= "/Users/rhodgson/OBDStestdata/Week5/filterbyp.csv")
 dim(filterby_p)
+```
+For next day's 
+```{r}
+#library(tidyverse)
+```
+Filter by 0.05 qne log fold over 1 - These will be use for gene ontology
+```{r}
+filterby_p05_FC1 <- res_apeglm_filter %>% dplyr::filter(padj<0.05,log2FoldChange > 1) 
+head(filterby_p05_FC1)
+dim(filterby_p05_FC1)
+```
+Filter by 0.01 and logfc2 over 1
+```{r}
+filterby_p01_FC1 <- res_apeglm_filter %>% dplyr::filter(padj<0.01,log2FoldChange > 1) 
+head(filterby_p01_FC1)
+dim(filterby_p01_FC1)
+```
+write to csv 
+```{r}
+write.csv(filterby_p05_FC1, row.names = FALSE, file= "/Users/rhodgson/OBDStestdata/Week5/filterbyp05.csv")
+write.csv(filterby_p01_FC1, row.names = FALSE, file= "/Users/rhodgson/OBDStestdata/Week5/filterbyp01.csv")
+```
+Also ened all genes for gene ontology searching
+```{r}
+write.csv(res_apeglm_filter, row.names = FALSE, file= "/Users/rhodgson/OBDStestdata/Week5/allgenes.csv")
+```
+
+Get the genes more than -1 fold expressed
+```{r}
+res_low005 <- res_apeglm_filter %>% dplyr::filter(padj<0.05) %>% dplyr::filter(log2FoldChange<(-1))
+entrezid <- mapIds(edb, keys = res_low005$Ensemble_id, column = "ENTREZID", keytype = "GENEID")   
+#
+res_low005$entrezid <- entrezid[res_low005$Ensemble_id]
+gene_list_low005 <- res_low005 %>% dplyr::filter(!is.na(entrezid)) %>% dplyr::pull(entrezid)
+```
+write to csv
+```{r}
+write.csv(gene_list_low005, row.names = FALSE, file= "/Users/rhodgson/OBDStestdata/Week5/gene_list_low005.csv")
+```
+
+Do the same for 0.01
+
+Get the genes more than -1 fold expressed
+```{r}
+res_low001 <- res_apeglm_filter %>% dplyr::filter(padj<0.01) %>% dplyr::filter(log2FoldChange<(-1))
+entrezid <- mapIds(edb, keys = res_low001$Ensemble_id, column = "ENTREZID", keytype = "GENEID")   
+#
+res_low001$entrezid <- entrezid[res_low001$Ensemble_id]
+gene_list_low001 <- res_low001 %>% dplyr::filter(!is.na(entrezid)) %>% dplyr::pull(entrezid)
+```
+write to csv
+```{r}
+write.csv(gene_list_low001, row.names = FALSE, file= "/Users/rhodgson/OBDStestdata/Week5/gene_list_low001.csv")
 ```
 
 #Generate VST and rlog transformed counts:
