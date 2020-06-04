@@ -1,0 +1,289 @@
+---
+title: "Bioconductor SC"
+author: "rhodgson"
+date: "04/06/2020"
+output: html_document
+---
+
+In the following slides, using the 􀃘ltered matrix 5k_pbmc_v3_filtered_feature_bc_matrix :
+1. Import the data into R; use DropletUtils.
+2. Compute quality control metrics to remove low-quality cells that would interfere with downstream
+analyses; use scater.
+3. Convert the counts into normalized expression values to eliminate cell-speci􀃘c biases (e.g., in capture
+ef􀃘ciency); use scater and/or scran.
+4. Select features for downstream analyses, e.g. highly variable genes; use scran.
+5. Apply dimensionality reduction to compact the data and further reduce noise; use scater.
+6. Cluster cells; use scran.
+7. Identify markers for each cluster; use scran.
+8. Bonus point: Identify doublets and compare their properties to other cells; use scDblFinder.
+At every step, take the time to visualise results and relate them to the raw/normalised data; try iSEE
+Install droplet Utils
+```{r}
+BiocManager::install("DropletUtils")
+```
+
+load libraries
+```{r}
+library(scater)
+library(Seurat)
+library(dplyr)
+library(ggplot2)
+library(DropletUtils)
+library(scran)
+library(tidyverse)
+```
+Data for today: /Users/rhodgson/OBDStestdata/Week6
+Read file in using DropletUtils
+```{r}
+data <- read10xCounts("/Users/rhodgson/OBDStestdata/Week6/5k_pbmc_v3_filtered_feature_bc_matrix/filtered_feature_bc_matrix/")
+
+assayNames(data) #Tells names of assays
+rowData(data) #Gives genes 
+colData(data) #Gives barcodes
+```
+In scater need to make sure that you specify the assay unlike in Seurat
+
+Cells are ordered by total numbers of UMIs so rank #1 is the cell with most UMIs
+Basically orders by UMI count so we can see where it drops off
+```{r}
+out1 <- barcodeRanks(counts(data))
+ggplot(as.data.frame(out1), aes(x=rank, y=total)) +geom_point()+scale_y_log10()+ scale_x_log10()
+
+       #fitted value from the spline - based on the shape o the curve, fits a smooth spline and tells you where the cell should be if it was on the line - uses this when it wants to estimate where the barcods per cell drops to the empty calls
+```
+
+
+#Compute quality control metrics to remove low-quality cells that would interfere with downstream analyses; use scater.
+Cell-level metrics are computed by the perCellQCMetrics() function and include:
+
+1. sum: total number of counts for the cell (i.e., the library size). 
+2. detected: the number of features for the cell that have counts above the detection limit (default of zero).
+3. subsets_X_percent: percentage of all counts that come from the feature control set named X.
+```{r}
+per.cell <- perCellQCMetrics(data, subsets=list(Mito=grep("^MT-", rowData(data)$Symbol)))
+summary(per.cell$sum)
+summary(per.cell$detected)
+summary(per.cell$subsets_Mito_percent)
+summary(as.data.frame(per.cell))
+```
+
+Add the QC metrics to the 
+```{r}
+colData(data) <- cbind(colData(data), per.cell)
+head(colData(data))
+```
+
+Metadata variables can be plotted against each other using the plotColData() function, as shown below. We expect to see an increasing number of detected genes with increasing total count. Each point represents a cell that is coloured according to its tissue of origin.
+
+Plot this data for now
+```{r}
+plotColData(data, x = "sum", y="detected") 
+```
+```{r}
+plotColData(data, x = "subsets_Mito_percent", y="detected") 
+```
+
+```{r}
+ggplot(as.data.frame(per.cell), aes(y=subsets_Mito_percent, x="sample"))+geom_violin()+geom_jitter(size=1)
+                                              
+```
+Shiny application to plot everything for you
+Can copy the R code from this to make a plot for you 
+```{r}
+library(iSEE)
+iSEE(data)
+```
+
+
+first filter for : UMI counts, gene counts, mitochondira doublets, etc then look downstream
+
+
+```{r}
+ggplot(as.data.frame(per.cell), aes(x="sample", y=subsets_Mito_percent))+geom_violin()+geom_point()
+```
+Identify which cells hve less than 15% mito then subset
+```{r}
+subsetdata <- data[,data$subsets_Mito_percent<15]
+```
+
+#Convert the counts into normalized expression values to eliminate cell-speci􀃘c biases (e.g., in capture ef􀃘ciency); use scater and/or scran.
+normalise for library size
+
+
+```{r}
+subsetdata <- logNormCounts(subsetdata)
+assayNames(subsetdata)
+```
+Feature selection usign scran
+- model gene variance to estimate how much is due to technical variation compared to biological variation
+
+
+We identify genes that drive biological heterogeneity in the data set by modelling the per-gene variance. The aim is use a subset of highly variable genes in downstream analyses like clustering, to improve resolution by removing genes driven by technical noise. We decompose the total variance of each gene into its biological and technical components by fitting a trend to the endogenous variances (A. T. Lun, McCarthy, and Marioni 2016). The fitted value of the trend is used as an estimate of the technical component, and we subtract the fitted value from the total variance to obtain the biological component for each gene.
+
+Here the trend will show the variance for most of the genes, the genes that deviate will be our biological features - relevant - variable genes, significantly higher for the level of expression
+```{r}
+out2 <- modelGeneVar(subsetdata)
+head(out2)
+
+plot(out2$mean, out2$total, xlab="Mean log-expression", ylab="Variance")
+curve(metadata(out2)$trend(x), col="blue", add=TRUE)
+```
+We can then extract some top genes for use in downstream procedures. This is usually done by passing the selected subset of genes to the subset.row argument (or equivalent) in the desired downstream function, as shown below for the PCA step.
+
+getTopHVGs works on output from modelgenVar
+```{r}
+# Get the top 10% of genes.
+top.hvgs <- getTopHVGs(out2, prop=0.1)
+length(top.hvgs)
+# Get the top 2000 genes.
+top.hvgs2 <- getTopHVGs(out2, n=2000)
+
+# Get all genes with positive biological components.
+top.hvgs3 <- getTopHVGs(out2, var.threshold=0)#to exclude samples with negative variance - this is default
+
+# Get all genes with FDR below 5%.
+top.hvgs4 <- getTopHVGs(out2, fdr.threshold=0.05)
+length(top.hvgs4)
+```
+```{r}
+# Running the PCA with the 10% of HVGs.
+subsetdata <- runPCA(subsetdata, subset_row=top.hvgs2)
+reducedDimNames(subsetdata)
+
+#Plots the red technical variance (at each mean level of expression - trend)
+#Blue is biological variance
+
+out2 %>% as_tibble() %>%
+  ggplot() +
+  geom_point(aes(mean, total), color = "black") +
+  geom_point(aes(mean, bio), color = "blue") +
+  geom_point(aes(mean, tech), color = "red")
+
+```
+
+#Automating PC choice
+One approach to choosing the number of PCs is to use the technical component estimates to determine the proportion of variance that should be retained. This is implemented in denoisePCA(), which takes the estimates returned by modelGeneVar() or friends. 
+
+give data, then out2 is the modelgenevar output
+
+This section is just a fancy way of picking a number of PCs
+```{r}
+sced <- denoisePCA(subsetdata, out2, subset.row=getTopHVGs(out2, prop=0.1))
+ncol(reducedDim(sced, "PCA")) #this sounds unrealistic
+```
+Access PCAA and plot variance explained by each PC manually
+```{r}
+str(reducedDim(subsetdata, "PCA"))
+attr(reducedDim(subsetdata, "PCA"), "percentVar") #percent of variance explained
+
+#Plot elbow plot
+plot(attr(reducedDim(subsetdata, "PCA"), "percentVar")) #12 PCs will explain enough variance
+```
+
+Plot PC1:2 #Visual inspection
+```{r}
+scater::plotPCA(subsetdata)
+```
+Another approach is based on the assumption that each subpopulation should be separated from each other on a different axis of variation. Thus, we choose the number of PCs that is not less than the number of subpopulations (which are unknown, of course, so we use the number of clusters as a proxy). It is then a simple to subset the dimensionality reduction result to the desired number of PCs.
+
+each axis should separate PCs
+
+Again this is another way of identifying how many PCs to use (the function getClusteredPC())
+
+Here we define "PCAsub" which is a reduced subset matrix thing of subsetdata to use as input for umap etc
+```{r}
+#output <- getClusteredPCs(reducedDim(subsetdata))
+#npcs <- metadata(output)$chosen
+
+#Define that we want 12 pc's here 
+reducedDim(subsetdata, "PCAsub") <-  reducedDim(subsetdata, "PCA")[,1:12,drop=FALSE]
+
+```
+
+#Cluster cells
+Clustering of scRNA-seq data is commonly performed with graph-based methods due to their relative scalability and robustness. scran provides several graph construction methods based on shared nearest neighbors (Xu and Su 2015) through the buildSNNGraph() function. This is most commonly generated from the selected PCs, after which methods from the igraph package can be used to identify clusters.
+
+ignore pcasub here - use PCA which is the output of runPCA i suppose.
+Cluster the cells usign SNN - define facto
+if we use use.dimred="PCA" then it ultimatel feeds in "PCA" which is a subset of the object. So we've put in d=12 as defined by elbow plot before
+
+Have used PCA as input here 
+```{r}
+g <- buildSNNGraph(reducedDim(subsetdata, "PCA"), transposed=TRUE, k=10, d=12)
+cluster <- igraph::cluster_louvain(g)$membership
+subsetdata$cluster <- factor(cluster)
+table(subsetdata$cluster) #This gives us the number of cells of each cluster
+plot(table(subsetdata$cluster))
+```
+
+We can then use methods from scater to visualize this on a t-SNE plot, as shown below.
+n components - output of UMAP components
+
+use.dimred = "PCA"   # this will use all the components
+diff between use.dimred = uses all entirety of object for the calc
+reduceddim(object) - access reduce dimension acessing just the PCA object 
+```{r}
+subsetdata <- runUMAP(subsetdata, dimred="PCA")
+umap1 <- plotUMAP(subsetdata, colour_by="cluster", text_by="cluster")
+```
+diff between use.dimred = uses all entirety of object for the calc
+reduceddim(object) - access reduce dimension acessing just the PCA object 
+
+
+
+
+#Find cluster markers
+
+The findMarkers() wrapper function will perform some simple differential expression tests between pairs of clusters to identify potential marker genes for each cluster. For each cluster, we perform t-tests to identify genes that are DE in each cluster compared to at least one other cluster. All pairwise tests are combined into a single ranking by simply taking the top genes from each pairwise comparison. For example, if we take all genes with Top <= 5, this is equivalent to the union of the top 5 genes from each pairwise comparison. This aims to provide a set of genes that is guaranteed to be able to distinguish the chosen cluster from all others.
+rowData gives you gene data of the data table - markers may have geneid but may not be in the correct order so will mess up everything 
+markers[[1]] tells you the genes that define cluster 1 - have to access each cluster as a list
+rownames are the gene names (ensembl)
+Use row metadata - order rows by geneids in markers table and add corresponding gene symbol from subsetdata rowData
+The ordering happens within rownames(markers[[1]])
+
+```{r}
+markers <- findMarkers(subsetdata, subsetdata$cluster)
+
+
+markers[[1]]$Geneid <- rowData(subsetdata)[rownames(markers[[1]]), "Symbol"]
+
+#this bit accesses first cluster and then
+markers[[1]][,1:3]
+#To access whole of frist cluster
+as.data.frame(markers[[1]])
+```
+
+
+Now need to check whether the UMAP and clustering correlate well together
+Will maybe use thus
+
+```{r}
+umap2 <- plotUMAP(subsetdata, colour_by="ENSG00000158869", text_by="cluster")
+umap1+umap2
+```
+
+
+do this later
+g is from the SNN graph 
+
+For graph-based methods, another diagnostic is to examine the ratio of observed to expected edge weights for each pair of clusters (closely related to the modularity score used in many cluster_* functions). We would usually expect to see high observed weights between cells in the same cluster with minimal weights between clusters, indicating that the clusters are well-separated. Off-diagonal entries indicate that some clusters are closely related, which is useful to know for checking that they are annotated consistently.
+
+```{r}
+ratio <- clusterModularity(g, cluster, as.ratio=TRUE)
+
+#library(pheatmap)
+pheatmap(log10(ratio+1), cluster_cols=FALSE, cluster_rows=FALSE,
+    col=rev(heat.colors(100)))
+```
+
+A more general diagnostic involves bootstrapping to determine the stability of the partitions between clusters. Given a clustering function, the bootstrapCluster() function uses bootstrapping to compute the co-assignment probability for each pair of original clusters, i.e., the probability that one randomly chosen cell from each cluster is assigned to the same cluster in the bootstrap replicate . Larger probabilities indicate that the separation between those clusters is unstable to the extent that it is sensitive to sampling noise, and thus should not be used for downstream inferences.
+
+```{r}
+ass.prob <- bootstrapCluster(subsetdata, FUN=function(x) {
+    g <- buildSNNGraph(x, use.dimred="PCAsub")
+    igraph::cluster_walktrap(g)$membership
+}, clusters=subsetdata$cluster)
+
+pheatmap(ass.prob, cluster_cols=FALSE, cluster_rows=FALSE,
+    col=colorRampPalette(c("white", "blue"))(100))
+```
